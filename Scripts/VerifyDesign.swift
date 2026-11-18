@@ -66,9 +66,9 @@ enum VerifyDesign {
         let presentation = NotchPresentation()
         presentation.expanded = true
         func panel(_ style: CompactStyle = .previewNotch) -> some View {
-            NotchView(store: store, compactStyle: style, detailWidth: 712,
+            NotchView(store: store, compactStyle: style, detailWidth: NotchShape.expandedWidth,
                       presentation: presentation, togglePin: {}, openSettings: {}, compactWidthChanged: { _ in })
-                .frame(width: 712, height: 712)
+                .frame(width: NotchShape.expandedWidth, height: NotchShape.expandedHeight)
                 .background(.black)
         }
         func strip(_ style: CompactStyle, at date: Date = now) -> EdgeLight {

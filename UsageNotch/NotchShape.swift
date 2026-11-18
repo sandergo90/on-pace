@@ -22,7 +22,8 @@ enum CompactStyle {
     case pill
 
     static let previewNotch = Self.notch(cameraWidth: 185)
-    static let notchBodyWidth: CGFloat = 392
+    private static let minimumNotchBodyWidth: CGFloat = 392
+    static let notchReadingInset: CGFloat = 16
 
     init(topInset: CGFloat, leftArea: CGRect?, rightArea: CGRect?) {
         if let leftArea, let rightArea, rightArea.minX > leftArea.maxX {
@@ -42,8 +43,16 @@ enum CompactStyle {
     }
 
     var notchWidth: CGFloat? {
-        guard case .notch = self else { return nil }
-        return Self.notchBodyWidth + 2 * shoulderWidth
+        guard case .notch(let cameraWidth) = self else { return nil }
+        return cameraWidth + 2 * (notchSideWidth(for: cameraWidth) + shoulderWidth)
+    }
+
+    func notchSideWidth(for cameraWidth: CGFloat) -> CGFloat {
+        // Reserve room for a three-digit percentage and its period beside the camera.
+        let readingWidth: CGFloat = 112
+        let cameraInset: CGFloat = 4
+        return max((Self.minimumNotchBodyWidth - cameraWidth) / 2,
+                   Self.notchReadingInset + readingWidth + cameraInset)
     }
 
     var shoulderWidth: CGFloat {
@@ -63,7 +72,7 @@ enum CompactStyle {
 
 /// The visible outline is also the AppKit mouse hit region.
 struct NotchShape: Shape {
-    static let expandedWidth: CGFloat = 712
+    static let expandedWidth: CGFloat = 712 + 2 * expandedShoulderWidth
     static let expandedHeight: CGFloat = 712
     static let expandedShoulderWidth: CGFloat = 12
     static let shadowSide: CGFloat = 48
@@ -133,37 +142,23 @@ struct EdgeLight: View {
     }
 
     private func notchContents(cameraWidth: CGFloat) -> some View {
-        let clearance = min(cameraWidth, CompactStyle.notchBodyWidth)
-        let sideWidth = (CompactStyle.notchBodyWidth - clearance) / 2
+        let sideWidth = style.notchSideWidth(for: cameraWidth)
         return HStack(spacing: 0) {
-            notchSide(width: sideWidth, alignment: .leading) { spacing in
-                reading(onlyProvider ?? .claude, spacing: spacing)
-            }
-            Color.clear.frame(width: clearance)
-            notchSide(width: sideWidth, alignment: .trailing) { spacing in
+            reading(onlyProvider ?? .claude)
+                .padding(.leading, CompactStyle.notchReadingInset)
+                .frame(width: sideWidth, alignment: .leading)
+            Color.clear.frame(width: cameraWidth)
+            Group {
                 if let onlyProvider {
                     if let reset = reset(for: onlyProvider) { resetReading(reset, provider: onlyProvider) }
                 } else {
-                    reading(.codex, mirrored: true, spacing: spacing)
+                    reading(.codex, mirrored: true)
                 }
             }
+            .padding(.trailing, CompactStyle.notchReadingInset)
+            .frame(width: sideWidth, alignment: .trailing)
         }
         .padding(.horizontal, style.shoulderWidth)
-    }
-
-    private func notchSide<Content: View>(
-        width: CGFloat, alignment: Alignment, @ViewBuilder content: (CGFloat) -> Content
-    ) -> some View {
-        // Keep the whole reading legible when an unusually wide housing leaves very little room.
-        let layoutWidth = max(width, 103)
-        let spacing = min(7, 2.5 + max(0, layoutWidth - 104) / 2)
-        let anchor: UnitPoint = alignment == .leading ? .leading : .trailing
-        return NotchSlot(width: layoutWidth, anchor: anchor) {
-            content(spacing)
-        }
-        .scaleEffect(width / layoutWidth, anchor: anchor)
-        .frame(width: width, height: style.height, alignment: alignment)
-        .clipped()
     }
 
     private var pillContents: some View {
@@ -190,9 +185,9 @@ struct EdgeLight: View {
         Rectangle().fill(.white.opacity(0.16)).frame(width: 1, height: 12)
     }
 
-    private func reading(_ provider: Provider, mirrored: Bool = false, spacing: CGFloat = 7) -> some View {
+    private func reading(_ provider: Provider, mirrored: Bool = false) -> some View {
         let state = store.state(for: provider)
-        return HStack(spacing: spacing) {
+        return HStack(spacing: 7) {
             if !state.isDisconnected {
                 if !mirrored { ToolSymbol(provider: provider, size: Self.logoSize) }
                 if let quota = state.reading?.compactQuota {
@@ -287,24 +282,6 @@ struct EdgeLight: View {
         }
         let readings = descriptions.isEmpty ? "no readings" : descriptions.joined(separator: ", ")
         return "AI usage: \(readings)." + (action == nil ? "" : " Show details")
-    }
-}
-
-private struct NotchSlot: Layout {
-    let width: CGFloat
-    let anchor: UnitPoint
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        CGSize(width: width, height: subviews.first?.sizeThatFits(.unspecified).height ?? 0)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        guard let content = subviews.first else { return }
-        let idealWidth = content.sizeThatFits(.unspecified).width
-        let padding = min(16, max(0, width - idealWidth))
-        let x = anchor == .leading ? bounds.minX + padding : bounds.maxX - padding
-        content.place(at: CGPoint(x: x, y: bounds.midY), anchor: anchor,
-                      proposal: ProposedViewSize(width: width - padding, height: bounds.height))
     }
 }
 
