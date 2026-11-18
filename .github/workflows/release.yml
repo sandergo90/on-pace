@@ -62,7 +62,7 @@ jobs:
     name: Sign, notarize, and publish
     needs: validate
     if: ${{ needs.validate.outputs.version != '' }}
-    runs-on: macos-26
+    runs-on: macos-26-intel
     timeout-minutes: 60
     environment: macos-release
     permissions:
