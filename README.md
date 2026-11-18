@@ -60,6 +60,31 @@ open ".build/xcode/Build/Products/Release/On pace..app"
 
 If you edit `project.yml`, run `xcodegen generate` to refresh the Xcode project.
 
+## Publish a release
+
+Update the app version and build number in `project.yml` and `UsageNotch/Info.plist` in a pull request. After merging it, tag the merged commit with the matching version and push the tag. For example, use `v0.1.4` for app version `0.1.4`.
+
+```sh
+git switch main
+git pull --ff-only
+git tag -a v0.1.4 -m 'On pace. 0.1.4'
+git push origin v0.1.4
+```
+
+GitHub Actions builds the universal app, signs and notarizes it, and publishes the ZIP as a stable release. If a run fails, fix the cause and rerun the workflow from the **Actions** tab.
+
+Set these secrets in the [macos-release environment](https://github.com/sandergo90/on-pace/settings/environments) before pushing the first automated release tag.
+
+| Secret | Value |
+| --- | --- |
+| `MACOS_SIGNING_CERTIFICATE` | Base64 of a Developer ID Application `.p12` export that includes the private key |
+| `MACOS_SIGNING_CERTIFICATE_PASSWORD` | Password for the `.p12` export |
+| `APPLE_NOTARY_KEY` | Contents of the App Store Connect team API key file (`.p8`) |
+| `APPLE_NOTARY_KEY_ID` | App Store Connect key ID |
+| `APPLE_NOTARY_ISSUER_ID` | App Store Connect issuer ID |
+
+[Create a Developer ID certificate](https://developer.apple.com/help/account/certificates/create-developer-id-certificates/) · [Create an App Store Connect team API key](https://developer.apple.com/documentation/appstoreconnectapi/creating-api-keys-for-app-store-connect-api)
+
 ## License
 
 The source is available under the [MIT License](LICENSE). On pace. is an independent Kodeus app. The notch design was inspired by [Agent HUD](https://github.com/jazzenchen/agent-hud-open).

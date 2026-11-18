@@ -21,14 +21,4 @@ jobs:
         with:
           persist-credentials: false
       - name: Build Release
-        run: |
-          xcodebuild \
-            -project UsageNotch.xcodeproj \
-            -scheme UsageNotch \
-            -configuration Release \
-            -destination 'generic/platform=macOS' \
-            -derivedDataPath "$RUNNER_TEMP/on-pace-derived-data" \
-            CODE_SIGNING_ALLOWED=NO \
-            ONLY_ACTIVE_ARCH=NO \
-            ARCHS='arm64 x86_64' \
-            build
+        run: bash Scripts/BuildMacOS.sh "$RUNNER_TEMP/on-pace-derived-data"
