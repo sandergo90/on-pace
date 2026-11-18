@@ -2,12 +2,18 @@ name: UsageNotch
 options:
   deploymentTarget:
     macOS: "14.0"
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: "2.10.1"
 targets:
   UsageNotch:
     type: application
     platform: macOS
     sources:
       - UsageNotch
+    dependencies:
+      - package: Sparkle
     info:
       path: UsageNotch/Info.plist
       properties:
@@ -15,8 +21,15 @@ targets:
         LSApplicationCategoryType: public.app-category.developer-tools
         NSPrefersDisplaySafeAreaCompatibilityMode: false
         CFBundleDisplayName: "On pace."
-        CFBundleShortVersionString: "0.1.4"
-        CFBundleVersion: "5"
+        CFBundleShortVersionString: "0.1.5"
+        CFBundleVersion: "6"
+        SUFeedURL: https://github.com/sandergo90/on-pace/releases/latest/download/appcast.xml
+        SUPublicEDKey: JlL2t8WvarlyGuwhljvbEOYLkNaHKGrxwtKvswXMFro=
+        SUEnableAutomaticChecks: true
+        SUAllowsAutomaticUpdates: false
+        SUVerifyUpdateBeforeExtraction: true
+        SURequireSignedFeed: true
+        SUShowReleaseNotes: false
     settings:
       base:
         PRODUCT_NAME: "On pace."
@@ -28,6 +41,9 @@ targets:
         CODE_SIGN_IDENTITY: "-"
         ENABLE_HARDENED_RUNTIME: YES
         ENABLE_APP_SANDBOX: NO
+      configs:
+        Debug:
+          ENABLE_HARDENED_RUNTIME: NO
 schemes:
   UsageNotch:
     build:

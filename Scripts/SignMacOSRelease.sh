@@ -56,6 +56,15 @@ while IFS= read -r entry; do
     signing_keychains+=("$entry")
 done < <(printf '%s\n' "$user_keychains" | sed -nE 's/^[[:space:]]*"(.*)"$/\1/p')
 security list-keychains -d user -s "${signing_keychains[@]}"
+
+# Sign Sparkle's nested code before sealing the enclosing framework and app.
+sparkle="$app/Contents/Frameworks/Sparkle.framework"
+sign=(codesign --force --sign "$identity" --keychain "$keychain" --options runtime --timestamp)
+"${sign[@]}" "$sparkle/Versions/B/XPCServices/Installer.xpc"
+"${sign[@]}" --preserve-metadata=entitlements "$sparkle/Versions/B/XPCServices/Downloader.xpc"
+"${sign[@]}" "$sparkle/Versions/B/Autoupdate"
+"${sign[@]}" "$sparkle/Versions/B/Updater.app"
+"${sign[@]}" "$sparkle"
 codesign --sign "$identity" --keychain "$keychain" --options runtime --timestamp "$app"
 security delete-keychain "$keychain"
 

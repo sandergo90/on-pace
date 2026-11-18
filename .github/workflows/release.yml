@@ -49,8 +49,10 @@ jobs:
             jq -c --arg tag "$GITHUB_REF_NAME" 'first(.[][] | select(.tag_name == $tag and (.draft | not))) // null')
           if [[ "$release" != null ]]; then
             if jq -e --arg zip "On-pace-$version-macOS.zip" \
-              '(.prerelease | not) and any(.assets[]; .name == $zip and .state == "uploaded")' <<< "$release" >/dev/null; then
-              echo "$GITHUB_REF_NAME already has a stable release with the macOS ZIP."
+              '.assets as $assets | (.prerelease | not) and
+                all([$zip, "appcast.xml"][]; . as $name | any($assets[]; .name == $name and .state == "uploaded"))' \
+              <<< "$release" >/dev/null; then
+              echo "$GITHUB_REF_NAME already has a stable release with the macOS ZIP and appcast."
               exit 0
             fi
             echo "$GITHUB_REF_NAME already has a published release that needs manual attention." >&2
@@ -65,6 +67,9 @@ jobs:
     runs-on: macos-26-intel
     timeout-minutes: 60
     environment: macos-release
+    concurrency:
+      group: macos-release-publish
+      cancel-in-progress: false
     permissions:
       contents: write
     env:
@@ -83,16 +88,48 @@ jobs:
           APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
           APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
         run: |
+          mkdir -p "$RUNNER_TEMP/on-pace-release"
           bash Scripts/SignMacOSRelease.sh \
             "$RUNNER_TEMP/on-pace-derived-data/Build/Products/Release/On pace..app" \
-            "$RUNNER_TEMP/On-pace-$RELEASE_VERSION-macOS.zip" \
+            "$RUNNER_TEMP/on-pace-release/On-pace-$RELEASE_VERSION-macOS.zip" \
             "$RELEASE_VERSION"
-      - name: Publish the macOS ZIP
+      - name: Generate the signed update feed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SPARKLE_EDDSA_PRIVATE_KEY: ${{ secrets.SPARKLE_EDDSA_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          assets="$RUNNER_TEMP/on-pace-release"
+          latest=$(gh release list --exclude-drafts --exclude-pre-releases --limit 100 \
+            --json isLatest,tagName --jq 'map(select(.isLatest))[0].tagName // ""')
+          if [[ -n "$latest" ]]; then
+            python3 - "$latest" "$GITHUB_REF_NAME" <<'PY'
+          import sys
+
+          latest, candidate = sys.argv[1:]
+          def version(tag):
+              return tuple(map(int, tag.removeprefix("v").split(".")))
+
+          if version(latest) >= version(candidate):
+              sys.exit(f"Publish a version newer than the latest stable release ({latest}).")
+          PY
+            prior_assets=$(gh release view "$latest" --json assets)
+            if jq -e 'any(.assets[]; .name == "appcast.xml")' <<< "$prior_assets" >/dev/null; then
+              gh release download "$latest" --pattern appcast.xml --dir "$assets"
+            fi
+          fi
+
+          derived="$RUNNER_TEMP/on-pace-derived-data"
+          bash Scripts/GenerateAppcast.sh "$derived/Build/Products/Release/On pace..app" \
+            "$assets/On-pace-$RELEASE_VERSION-macOS.zip" \
+            "$derived/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_appcast" \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/"
+      - name: Publish the macOS ZIP and appcast
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          zip="$RUNNER_TEMP/On-pace-$RELEASE_VERSION-macOS.zip"
+          assets="$RUNNER_TEMP/on-pace-release"
           tag_commit=$(git ls-remote origin "refs/tags/$GITHUB_REF_NAME" "refs/tags/$GITHUB_REF_NAME^{}" |
             sort -k2 | tail -n 1 | cut -f1)
           if [[ "$tag_commit" != "$(git rev-parse HEAD)" ]]; then
@@ -102,12 +139,12 @@ jobs:
           release=$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases" |
             jq -c --arg tag "$GITHUB_REF_NAME" 'first(.[][] | select(.tag_name == $tag)) // null')
           if [[ "$release" == null ]]; then
-            gh release create "$GITHUB_REF_NAME" "$zip" --verify-tag --latest \
+            gh release create "$GITHUB_REF_NAME" --verify-tag --draft \
               --title "On pace. $RELEASE_VERSION" --generate-notes
-          elif jq -e '.draft' <<< "$release" >/dev/null; then
-            gh release upload "$GITHUB_REF_NAME" "$zip" --clobber
-            gh release edit "$GITHUB_REF_NAME" --draft=false --prerelease=false --latest
-          else
+          elif ! jq -e '.draft' <<< "$release" >/dev/null; then
             echo "$GITHUB_REF_NAME was published during this run. Check the existing release." >&2
             exit 1
           fi
+          gh release upload "$GITHUB_REF_NAME" --clobber \
+            "$assets/On-pace-$RELEASE_VERSION-macOS.zip" "$assets/appcast.xml"
+          gh release edit "$GITHUB_REF_NAME" --draft=false --prerelease=false --latest

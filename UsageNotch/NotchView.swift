@@ -54,7 +54,8 @@ struct NotchView: View {
     }
 
     private func details(at now: Date) -> some View {
-        VStack(spacing: 12) {
+        let updateAvailable = presentation.updateVersion != nil
+        return VStack(spacing: 12) {
             HStack(spacing: 8) {
                 Button(action: togglePin) {
                     HStack(spacing: 7) {
@@ -74,7 +75,17 @@ struct NotchView: View {
                     .lineLimit(1)
                 control("arrow.clockwise", label: "Refresh usage", action: store.refresh)
                     .disabled(store.isRefreshing)
-                control("gearshape", label: "Settings", action: openSettings)
+                control("gearshape", label: updateAvailable ? "Settings, update available" : "Settings", action: openSettings)
+                    .overlay(alignment: .topTrailing) {
+                        if updateAvailable {
+                            Circle()
+                                .fill(TrailMark.lime)
+                                .frame(width: 5, height: 5)
+                                .padding(2)
+                                .allowsHitTesting(false)
+                                .accessibilityHidden(true)
+                        }
+                    }
                 control(pinned ? "pin.fill" : "pin", label: "Pin usage panel", selected: pinned, action: togglePin)
                     .accessibilityValue(pinned ? "On" : "Off")
                     .accessibilityAddTraits(pinned ? .isSelected : [])

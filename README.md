@@ -35,7 +35,9 @@ Use macOS 14 or later on a Mac with Apple silicon or an Intel processor. Install
 - The notch shows the reported five-hour limit, or the weekly limit when the five-hour limit is unavailable.
 - Hover for the breakdown. Click the notch or use the pin to keep it open.
 - Choose **7 days** or **30 days** to compare activity with the preceding period. The app remembers your choice.
-- Use the gear menu to open **Settings…**, **About On pace.**, or quit.
+- Use the gear menu to open **Settings…**, **About On pace.**, **Check for Updates…**, or quit.
+- On pace. checks for stable releases at launch and about once a day while running. A dot on the gear shows when an update is available.
+- Open **Update Available** and choose **Install Update**. On pace. verifies the download and lets you install it and relaunch.
 - On a display without a camera notch, a compact notch shape sits at the top edge, within the menu bar's height.
 - The small `5h` and `wk` labels identify the period beside each percentage. The panel shows the same limit in its ring.
 - In **Settings > Providers**, choose which providers appear in the notch, panel, and history. At least one stays on.
@@ -43,7 +45,7 @@ Use macOS 14 or later on a Mac with Apple silicon or an Intel processor. Install
 
 ## Usage data
 
-On pace. reads session logs on your Mac for tokens, cache hits, sessions, and activity. It requests quota readings through your installed CLI tools and their existing sign-ins. The app keeps no separate copy of your credentials. It checks for updates every minute and dims the last quota reading after five minutes without a fresh one.
+On pace. reads session logs on your Mac for tokens, cache hits, sessions, and activity. It requests quota readings through your installed CLI tools and their existing sign-ins. The app keeps no separate copy of your credentials. It refreshes quota readings every minute and dims the last reading after five minutes without a fresh one.
 
 API values are estimates in euros based on the published rates and exchange rate in `StandardTokenRates.swift`. If the app can price only some of the logged tokens, it labels the estimate as partial.
 
@@ -54,24 +56,24 @@ The Claude Code quota reader uses the CLI's internal `get_usage` command. A CLI 
 Open `UsageNotch.xcodeproj` in Xcode and choose **Product > Run**. You can also build from Terminal.
 
 ```sh
-xcodebuild -project UsageNotch.xcodeproj -scheme UsageNotch -configuration Release -destination 'platform=macOS' -derivedDataPath .build/xcode build
-open ".build/xcode/Build/Products/Release/On pace..app"
+xcodebuild -project UsageNotch.xcodeproj -scheme UsageNotch -configuration Debug -destination 'platform=macOS' -derivedDataPath .build/xcode build
+open ".build/xcode/Build/Products/Debug/On pace..app"
 ```
 
 If you edit `project.yml`, run `xcodegen generate` to refresh the Xcode project.
 
 ## Publish a release
 
-Update the app version and build number in `project.yml` and `UsageNotch/Info.plist` in a pull request. After merging it, tag the merged commit with the matching version and push the tag. For example, use `v0.1.4` for app version `0.1.4`.
+Update the app version and increase the build number in `project.yml` in a pull request. Run `xcodegen generate` to update `UsageNotch/Info.plist`. After merging the pull request, tag the merged commit with the matching version and push the tag. For example, use `v0.1.5` for app version `0.1.5`.
 
 ```sh
 git switch main
 git pull --ff-only
-git tag -a v0.1.4 -m 'On pace. 0.1.4'
-git push origin v0.1.4
+git tag -a v0.1.5 -m 'On pace. 0.1.5'
+git push origin v0.1.5
 ```
 
-GitHub Actions builds the universal app, signs and notarizes it, and publishes the ZIP as a stable release. If a run fails because of missing credentials or a temporary service error, fix the issue and rerun it from the **Actions** tab.
+GitHub Actions builds, signs, and notarizes the universal app. It publishes the ZIP and the signed Sparkle update feed together as a stable release. If a run fails because of missing credentials or a temporary service error, fix the issue and rerun it from the **Actions** tab.
 
 Set these secrets in the [macos-release environment](https://github.com/sandergo90/on-pace/settings/environments) before pushing the first automated release tag.
 
@@ -82,6 +84,9 @@ Set these secrets in the [macos-release environment](https://github.com/sandergo
 | `APPLE_NOTARY_KEY` | Contents of the App Store Connect team API key file (`.p8`) |
 | `APPLE_NOTARY_KEY_ID` | App Store Connect key ID |
 | `APPLE_NOTARY_ISSUER_ID` | App Store Connect issuer ID |
+| `SPARKLE_EDDSA_PRIVATE_KEY` | Sparkle private key exported from the `be.kodeus.UsageNotch` Keychain account with `generate_keys` |
+
+Keep the Sparkle key in Keychain so it can sign updates for copies already installed. [Sparkle signing guide](https://sparkle-project.org/documentation/#eddsa-ed25519-signatures)
 
 [Create a Developer ID certificate](https://developer.apple.com/help/account/certificates/create-developer-id-certificates/) · [Create an App Store Connect team API key](https://developer.apple.com/documentation/appstoreconnectapi/creating-api-keys-for-app-store-connect-api)
 

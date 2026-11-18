@@ -8,6 +8,7 @@ final class NotchPresentation {
     var pinned = false
     var animates = false
     var showsLaunchMark = false
+    var updateVersion: String?
 }
 
 /// Keeps the hosting view at its final layout size while Core Animation morphs the visible outline.

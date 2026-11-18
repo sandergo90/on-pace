@@ -48,14 +48,16 @@ enum VerifyDesign {
             precondition(used == 0 ? compactFill == 0 && panelFill == 0 : compactFill >= 3 && panelFill >= 4)
             precondition(compactFill <= 30 && panelFill <= 280)
         }
-        let flatScreen = CompactStyle(topInset: 0, leftArea: nil, rightArea: nil)
+        let flatScreen = CompactStyle(topInset: 0, leftArea: nil, rightArea: nil, menuBarHeight: 24)
         guard case .pill = flatScreen else { preconditionFailure("A flat screen should show a pill") }
-        let left = CGRect(x: 0, y: 0, width: 600, height: 34)
-        let right = CGRect(x: 785, y: 0, width: 600, height: 34)
-        let cameraScreen = CompactStyle(topInset: 0, leftArea: left, rightArea: right)
-        guard case .notch(cameraWidth: 185) = cameraScreen else {
-            preconditionFailure("The auxiliary areas should identify the camera gap")
+        let left = CGRect(x: 0, y: 0, width: 600, height: 32)
+        let right = CGRect(x: 785, y: 0, width: 600, height: 32)
+        let cameraScreen = CompactStyle(topInset: 32, leftArea: left, rightArea: right, menuBarHeight: 33)
+        guard case .notch(cameraWidth: 185, height: 33) = cameraScreen else {
+            preconditionFailure("The notch should clear the camera and align with the menu bar")
         }
+        let hiddenMenuBar = CompactStyle(topInset: 32, leftArea: left, rightArea: right, menuBarHeight: 0)
+        precondition(hiddenMenuBar.height == 32, "The notch should cover the camera when the menu bar is hidden")
         for style in [
             CompactStyle(topInset: 34, leftArea: nil, rightArea: nil),
             CompactStyle(topInset: 0, leftArea: left, rightArea: nil),

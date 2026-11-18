@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		07D43AD400BEA777A66788DD /* UsageLogWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCD2DDCF49A7D94BC0D98ADB /* UsageLogWatcher.swift */; };
 		0B4B74C62615013EFDF0B8F4 /* UsageFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52BFBC27F50314FFA5DECDDB /* UsageFormat.swift */; };
+		2233D2D468D0FA38707D2016 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 8FF1B0636C5391B7A20D10B8 /* Sparkle */; };
 		24F8E3C762F0DD46C6CF7229 /* UsageCharts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EDD2C0B2C10DFD3E165E993 /* UsageCharts.swift */; };
 		372B19C8197D1B49EBBFFECB /* UsageHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 686D07570B90FA5FE331C800 /* UsageHistoryView.swift */; };
 		47407C30AF754CCDA9DC4A5A /* CLIConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FE716A196E406A21226F6F1 /* CLIConnection.swift */; };
@@ -19,6 +20,7 @@
 		804FFC109F76B334CD56B888 /* LocalUsage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59B39CF49131409E2A2BCB87 /* LocalUsage.swift */; };
 		8B73DFDC44B9580AF54FBE48 /* Quota.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8DBD13DC8B50B0000709104 /* Quota.swift */; };
 		8D26ECB213950F1854AF4669 /* UsageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DBFAD660B90A5D4A36F40D5 /* UsageStore.swift */; };
+		A7C239FE9AC4A355C26A2469 /* Sparkle-License.txt in Resources */ = {isa = PBXBuildFile; fileRef = FC782438BF4AB5D30CB7CE07 /* Sparkle-License.txt */; };
 		AB8C2049A0C008D63CB98751 /* UsageHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 259DE894925883D561E3D56C /* UsageHistory.swift */; };
 		AF3606FE1F3EA3E5526D666C /* TrailBrand.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFF1A13D938A0E1A1230908D /* TrailBrand.swift */; };
 		B179A39C44B56E234F26D0B8 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B84470243699D1900982366 /* SettingsView.swift */; };
@@ -52,7 +54,19 @@
 		C8DBD13DC8B50B0000709104 /* Quota.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Quota.swift; sourceTree = "<group>"; };
 		CBAC56EF1062CC2A11C7D591 /* QuotaSources.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuotaSources.swift; sourceTree = "<group>"; };
 		E83EAC804D82028891C6139A /* UsageNotch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = UsageNotch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		FC782438BF4AB5D30CB7CE07 /* Sparkle-License.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Sparkle-License.txt"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		C41A017216B25DC7ACA18EAC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2233D2D468D0FA38707D2016 /* Sparkle in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		0188276F0B30E82EF57F823D /* UsageNotch */ = {
@@ -79,6 +93,7 @@
 				BCD2DDCF49A7D94BC0D98ADB /* UsageLogWatcher.swift */,
 				071AA4FE22C9E337D826A790 /* UsagePreferences.swift */,
 				6DBFAD660B90A5D4A36F40D5 /* UsageStore.swift */,
+				88EF11E5B996E908D72FE6DF /* Resources */,
 			);
 			path = UsageNotch;
 			sourceTree = "<group>";
@@ -89,6 +104,14 @@
 				E83EAC804D82028891C6139A /* UsageNotch.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		88EF11E5B996E908D72FE6DF /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				FC782438BF4AB5D30CB7CE07 /* Sparkle-License.txt */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 		A48E1FCD0A7C9F85D158CA43 = {
@@ -108,6 +131,7 @@
 			buildPhases = (
 				D22D5A6C6147973355167565 /* Sources */,
 				C89FB47CAE189C4BB15CF713 /* Resources */,
+				C41A017216B25DC7ACA18EAC /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -115,6 +139,7 @@
 			);
 			name = UsageNotch;
 			packageProductDependencies = (
+				8FF1B0636C5391B7A20D10B8 /* Sparkle */,
 			);
 			productName = UsageNotch;
 			productReference = E83EAC804D82028891C6139A /* UsageNotch.app */;
@@ -143,6 +168,9 @@
 			);
 			mainGroup = A48E1FCD0A7C9F85D158CA43;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				22CBE4F643A8F6CF2FB331DE /* XCRemoteSwiftPackageReference "Sparkle" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 7A369242AD1F3BD7A29E0E88 /* Products */;
 			projectDirPath = "";
@@ -159,6 +187,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D01AB1E773223F4259279604 /* Assets.xcassets in Resources */,
+				A7C239FE9AC4A355C26A2469 /* Sparkle-License.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -321,7 +350,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				ENABLE_APP_SANDBOX = NO;
-				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
 				INFOPLIST_FILE = UsageNotch/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -379,6 +408,25 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		22CBE4F643A8F6CF2FB331DE /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = exactVersion;
+				version = 2.10.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		8FF1B0636C5391B7A20D10B8 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 22CBE4F643A8F6CF2FB331DE /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 9696E35F4F3358060ED67696 /* Project object */;
 }

@@ -13,37 +13,47 @@ extension NSScreen {
     }
 
     var compactStyle: CompactStyle {
-        CompactStyle(topInset: safeAreaInsets.top, leftArea: auxiliaryTopLeftArea, rightArea: auxiliaryTopRightArea)
+        CompactStyle(
+            topInset: safeAreaInsets.top, leftArea: auxiliaryTopLeftArea, rightArea: auxiliaryTopRightArea,
+            menuBarHeight: frame.maxY - visibleFrame.maxY
+        )
     }
 }
 
 enum CompactStyle {
-    case notch(cameraWidth: CGFloat)
+    case notch(cameraWidth: CGFloat, height: CGFloat)
     case pill
 
-    static let previewNotch = Self.notch(cameraWidth: 185)
+    private static let previewCameraWidth: CGFloat = 185
+    static let previewNotch = Self.notch(cameraWidth: previewCameraWidth, height: 34)
     private static let minimumNotchBodyWidth: CGFloat = 392
     static let notchReadingInset: CGFloat = 16
 
-    init(topInset: CGFloat, leftArea: CGRect?, rightArea: CGRect?) {
-        if let leftArea, let rightArea, rightArea.minX > leftArea.maxX {
-            self = .notch(cameraWidth: rightArea.minX - leftArea.maxX)
-        } else if topInset > 0 || leftArea != nil || rightArea != nil {
-            self = Self.previewNotch
-        } else {
+    init(topInset: CGFloat, leftArea: CGRect?, rightArea: CGRect?, menuBarHeight: CGFloat = 0) {
+        guard topInset > 0 || leftArea != nil || rightArea != nil else {
             self = .pill
+            return
         }
+        let cameraWidth: CGFloat
+        if let leftArea, let rightArea, rightArea.minX > leftArea.maxX {
+            cameraWidth = rightArea.minX - leftArea.maxX
+        } else {
+            cameraWidth = Self.previewCameraWidth
+        }
+        // Keep covering the camera housing when the menu bar is hidden.
+        let height = max(menuBarHeight, topInset, leftArea?.height ?? 0, rightArea?.height ?? 0)
+        self = .notch(cameraWidth: cameraWidth, height: height > 0 ? height : Self.previewNotch.height)
     }
 
     var height: CGFloat {
         switch self {
-        case .notch: 34
+        case .notch(_, let height): height
         case .pill: 30
         }
     }
 
     var notchWidth: CGFloat? {
-        guard case .notch(let cameraWidth) = self else { return nil }
+        guard case .notch(let cameraWidth, _) = self else { return nil }
         return cameraWidth + 2 * (notchSideWidth(for: cameraWidth) + shoulderWidth)
     }
 
@@ -134,7 +144,7 @@ struct EdgeLight: View {
     private var contents: some View {
         Group {
             switch style {
-            case .notch(let cameraWidth): notchContents(cameraWidth: cameraWidth)
+            case .notch(let cameraWidth, _): notchContents(cameraWidth: cameraWidth)
             case .pill: pillContents
             }
         }

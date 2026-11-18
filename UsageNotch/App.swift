@@ -1,4 +1,5 @@
 import AppKit
+import Sparkle
 import SwiftUI
 
 @main
@@ -37,6 +38,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         timer.tolerance = 2
         RunLoop.main.add(timer, forMode: .common)
         refreshTimer = timer
+        notch?.startUpdates()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -58,7 +60,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 @MainActor
-private final class NotchPanel: NSObject {
+private final class NotchPanel: NSObject, @preconcurrency SPUStandardUserDriverDelegate {
     private let displayName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "On pace."
     private let store: UsageStore
     private let panel = PassivePanel(
@@ -66,6 +68,9 @@ private final class NotchPanel: NSObject {
     )
     private let surface = NotchSurface()
     private let presentation = NotchPresentation()
+    private lazy var updateController = SPUStandardUpdaterController(
+        startingUpdater: false, updaterDelegate: nil, userDriverDelegate: self
+    )
     private var placement: Placement?
     private var compactWidth: CGFloat = 0
     private var hoverTask: Task<Void, Never>?
@@ -103,6 +108,13 @@ private final class NotchPanel: NSObject {
         localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: movement) { [weak self] event in
             self?.updatePointer()
             return event
+        }
+    }
+
+    func startUpdates() {
+        updateController.startUpdater()
+        if updateController.updater.automaticallyChecksForUpdates {
+            updateController.updater.checkForUpdatesInBackground()
         }
     }
 
@@ -226,11 +238,38 @@ private final class NotchPanel: NSObject {
 
     private func settingsMenu() {
         let menu = NSMenu()
+        menu.autoenablesItems = false
         item("Settings…", action: #selector(showSettings), in: menu).keyEquivalent = ","
         menu.addItem(.separator())
         item("About \(displayName)", action: #selector(showAbout), in: menu)
+        let updateTitle = presentation.updateVersion.map { "Update Available (\($0))…" } ?? "Check for Updates…"
+        item(updateTitle, action: #selector(checkForUpdates), in: menu).isEnabled = updateController.updater.canCheckForUpdates
         item("Quit \(displayName)", action: #selector(quit), in: menu).keyEquivalent = "q"
         showMenu(menu)
+    }
+
+    @objc private func checkForUpdates() {
+        guard updateController.updater.canCheckForUpdates else { return }
+        // The notch sits above Sparkle's normal and modal windows.
+        panel.level = .normal
+        updateController.checkForUpdates(nil)
+    }
+
+    var supportsGentleScheduledUpdateReminders: Bool { true }
+
+    func standardUserDriverShouldHandleShowingScheduledUpdate(_ update: SUAppcastItem,
+                                                             andInImmediateFocus immediateFocus: Bool) -> Bool {
+        false
+    }
+
+    func standardUserDriverWillHandleShowingUpdate(_ handleShowingUpdate: Bool, forUpdate update: SUAppcastItem,
+                                                  state: SPUUserUpdateState) {
+        if !handleShowingUpdate { presentation.updateVersion = update.displayVersionString }
+    }
+
+    func standardUserDriverWillFinishUpdateSession() {
+        presentation.updateVersion = nil
+        panel.level = .statusBar
     }
 
     @discardableResult
@@ -244,7 +283,8 @@ private final class NotchPanel: NSObject {
         hoverTask?.cancel()
         menuOpen = true
         let frame = panel.frame
-        let anchor = NSPoint(x: frame.maxX - NotchShape.shadowSide - 80, y: frame.maxY - 31)
+        let menuTop = min(frame.maxY - 31, panel.screen?.visibleFrame.maxY ?? frame.maxY) - 8
+        let anchor = NSPoint(x: frame.maxX - NotchShape.shadowSide - 80, y: menuTop)
         menu.popUp(positioning: nil, at: anchor, in: nil)
         menuOpen = false
         updatePointer()
