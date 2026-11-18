@@ -29,8 +29,18 @@ extension UsageStore {
 SWIFT
 cat >> .build/design-verification/source/SettingsView.swift <<'SWIFT'
 extension SettingsView {
-    static func verification(store: UsageStore, tab: Tab) -> Self {
-        var view = Self(store: store)
+    static func verification(
+        store: UsageStore, tab: Tab, automaticallyChecks: Bool = true, availableVersion: String? = nil
+    ) -> Self {
+        let updates = UpdateSettings()
+        updates.automaticallyChecks = automaticallyChecks
+        updates.canCheck = true
+        updates.lastCheck = automaticallyChecks ? .now : nil
+        let presentation = NotchPresentation()
+        presentation.updateVersion = availableVersion
+        var view = Self(store: store, updates: updates, presentation: presentation,
+                        setAutomaticChecks: { updates.automaticallyChecks = $0 }, checkForUpdates: {},
+                        version: "0.1.5")
         view._selectedTab = State(initialValue: tab)
         return view
     }

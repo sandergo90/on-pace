@@ -1,16 +1,32 @@
 import AppKit
+import Observation
 import SwiftUI
+
+@MainActor @Observable
+final class UpdateSettings {
+    var automaticallyChecks = true
+    var canCheck = false
+    var lastCheck: Date?
+}
 
 struct SettingsView: View {
     enum Tab: String, Hashable {
         case general = "General", providers = "Providers"
     }
 
+    static let size = CGSize(width: 600, height: 500)
+
     let store: UsageStore
+    let updates: UpdateSettings
+    let presentation: NotchPresentation
+    let setAutomaticChecks: (Bool) -> Void
+    let checkForUpdates: () -> Void
+    var version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
     var generalChanged: () -> Void = {}
     var titleChanged: (String) -> Void = { _ in }
     @State private var selectedTab = Tab.general
     @State private var screens = NSScreen.screens
+    @State private var now = Date.now
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -22,7 +38,7 @@ struct SettingsView: View {
                 .tag(Tab.providers)
         }
         .padding(12)
-        .frame(width: 600, height: 440)
+        .frame(width: Self.size.width, height: Self.size.height)
         .preferredColorScheme(.dark)
         .onChange(of: selectedTab) { _, tab in titleChanged(tab.rawValue) }
         .onChange(of: store.preferences.opensOnHover) { _, _ in generalChanged() }
@@ -30,6 +46,7 @@ struct SettingsView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)) { _ in
             screens = NSScreen.screens
         }
+        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in now = .now }
     }
 
     private var general: some View {
@@ -66,8 +83,41 @@ struct SettingsView: View {
             } footer: {
                 Text("The screen that shows On pace.")
             }
+            updateSection
         }
         .formStyle(.grouped)
+    }
+
+    private var updateSection: some View {
+        let automaticDescription = updates.automaticallyChecks
+            ? "Once a day while On pace. runs. Updates never install without asking."
+            : "Use Check Now or the gear menu to look for updates."
+        let status = presentation.updateVersion.map { "Version \($0) is available" }
+            ?? UsageFormat.lastUpdateCheck(updates.lastCheck, now: now)
+        return Section("Updates") {
+            Toggle(isOn: Binding(get: { updates.automaticallyChecks }, set: { setAutomaticChecks($0) })) {
+                updateLabel("Check for updates automatically", description: automaticDescription)
+            }
+            .toggleStyle(.switch)
+            HStack {
+                updateLabel(version.map { "On pace. \($0)" } ?? "On pace.", description: status)
+                Spacer()
+                Button("Check Now", action: checkForUpdates)
+                    .buttonStyle(.bordered)
+                    .disabled(!updates.canCheck)
+                    .accessibilityValue(Text(status))
+            }
+        }
+    }
+
+    private func updateLabel(_ title: String, description: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+            Text(description)
+                .font(.system(size: 11.5))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 4)
     }
 
     private var providers: some View {

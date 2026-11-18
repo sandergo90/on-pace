@@ -12,6 +12,7 @@ enum VerifyDesign {
         defer { defaults.removePersistentDomain(forName: suite) }
         let preferences = UsagePreferences(defaults: defaults)
         let store = UsageStore(preferences: preferences)
+        verifyUpdateCheckDates()
         let now = Date.now
         func quota(_ id: String, _ title: String, _ used: Double, _ minutes: Int) -> QuotaWindow {
             QuotaWindow(id, title: title, used: used,
@@ -90,6 +91,10 @@ enum VerifyDesign {
         store.record(UsageReading(windows: [session, weekly, opus, sonnet], plan: "Max 20×")!, for: .claude)
         try await capture(panel(), name: "panel-all-claude-limits", output: output)
         try await capture(SettingsView.verification(store: store, tab: .general), name: "settings-general", output: output)
+        try await capture(SettingsView.verification(store: store, tab: .general, automaticallyChecks: false),
+                          name: "settings-automatic-updates-off", output: output)
+        try await capture(SettingsView.verification(store: store, tab: .general, availableVersion: "0.1.6"),
+                          name: "settings-update-available", output: output)
         try await capture(SettingsView.verification(store: store, tab: .providers), name: "settings-providers", output: output)
         preferences.setEnabled(false, for: .claude)
         precondition(UsagePreferences(defaults: defaults).enabledProviders == [.codex])
@@ -126,7 +131,24 @@ enum VerifyDesign {
         precondition(UsagePreferences(defaults: defaults).preferredDisplay == "verification-display")
         preferences.preferredDisplay = ""
         try await capture(SettingsView.verification(store: store, tab: .general), name: "settings-click-to-open", output: output)
-        print("PASS: layout and quota window selection, reset text and narration, minimum fills, provider persistence, last-provider guard, history filtering and totals")
+        print("PASS: layout and quota window selection, reset text and narration, minimum fills, provider persistence, last-provider guard, history filtering and totals, update check dates")
+    }
+
+    static func verifyUpdateCheckDates() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Brussels")!
+        let locale = Locale(identifier: "en_GB")
+        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 18, hour: 0, minute: 2))!
+        let today = calendar.date(from: DateComponents(year: 2026, month: 11, day: 18, hour: 0, minute: 1))!
+        let yesterday = calendar.date(from: DateComponents(year: 2026, month: 11, day: 17, hour: 21, minute: 12))!
+        let earlier = calendar.date(from: DateComponents(year: 2026, month: 11, day: 14))!
+        precondition(UsageFormat.lastUpdateCheck(today, now: now, calendar: calendar, locale: locale)
+                     == "Last checked today at 00:01")
+        precondition(UsageFormat.lastUpdateCheck(yesterday, now: now, calendar: calendar, locale: Locale(identifier: "en_US"))
+                     == "Last checked yesterday at 21:12")
+        precondition(UsageFormat.lastUpdateCheck(earlier, now: now, calendar: calendar, locale: locale)
+                     == "Last checked 14 Nov")
+        precondition(UsageFormat.lastUpdateCheck(nil, now: now, calendar: calendar, locale: locale) == "Not checked yet")
     }
 
     @MainActor static func capture<Content: View>(_ content: Content, name: String, output: URL) async throws {

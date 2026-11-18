@@ -71,6 +71,8 @@ private final class NotchPanel: NSObject, @preconcurrency SPUStandardUserDriverD
     private lazy var updateController = SPUStandardUpdaterController(
         startingUpdater: false, updaterDelegate: nil, userDriverDelegate: self
     )
+    private let updateSettings = UpdateSettings()
+    private var updateObservations: [NSKeyValueObservation] = []
     private var placement: Placement?
     private var compactWidth: CGFloat = 0
     private var hoverTask: Task<Void, Never>?
@@ -242,8 +244,15 @@ private final class NotchPanel: NSObject, @preconcurrency SPUStandardUserDriverD
         item("Settings…", action: #selector(showSettings), in: menu).keyEquivalent = ","
         menu.addItem(.separator())
         item("About \(displayName)", action: #selector(showAbout), in: menu)
-        let updateTitle = presentation.updateVersion.map { "Update Available (\($0))…" } ?? "Check for Updates…"
-        item(updateTitle, action: #selector(checkForUpdates), in: menu).isEnabled = updateController.updater.canCheckForUpdates
+        let version = presentation.updateVersion
+        let updateTitle = version.map { "Update Available (\($0))…" } ?? "Check for Updates…"
+        let updateItem = item(updateTitle, action: #selector(checkForUpdates), in: menu)
+        updateItem.isEnabled = updateController.updater.canCheckForUpdates
+        if version != nil {
+            let row = UpdateMenuItemView(item: updateItem)
+            updateItem.view = row
+            menu.delegate = row
+        }
         item("Quit \(displayName)", action: #selector(quit), in: menu).keyEquivalent = "q"
         showMenu(menu)
     }
@@ -293,8 +302,22 @@ private final class NotchPanel: NSObject, @preconcurrency SPUStandardUserDriverD
 
     @objc private func showSettings() {
         if settingsWindow == nil {
+            let updater = updateController.updater
+            let settings = updateSettings
+            // Sparkle changes these KVO properties on the main thread.
+            updateObservations = [
+                updater.observe(\.automaticallyChecksForUpdates, options: [.initial, .new]) { updater, _ in
+                    MainActor.assumeIsolated { settings.automaticallyChecks = updater.automaticallyChecksForUpdates }
+                },
+                updater.observe(\.canCheckForUpdates, options: [.initial, .new]) { updater, _ in
+                    MainActor.assumeIsolated { settings.canCheck = updater.canCheckForUpdates }
+                },
+                updater.observe(\.lastUpdateCheckDate, options: [.initial, .new]) { updater, _ in
+                    MainActor.assumeIsolated { settings.lastCheck = updater.lastUpdateCheckDate }
+                },
+            ]
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 600, height: 440),
+                contentRect: NSRect(origin: .zero, size: SettingsView.size),
                 styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false
             )
             window.title = "General"
@@ -302,6 +325,10 @@ private final class NotchPanel: NSObject, @preconcurrency SPUStandardUserDriverD
             window.appearance = NSAppearance(named: .darkAqua)
             window.contentViewController = NSHostingController(rootView: SettingsView(
                 store: store,
+                updates: settings,
+                presentation: presentation,
+                setAutomaticChecks: { updater.automaticallyChecksForUpdates = $0 },
+                checkForUpdates: { [weak self] in self?.checkForUpdates() },
                 generalChanged: { [weak self] in self?.settingsChanged() },
                 titleChanged: { [weak window] title in window?.title = title }
             ))
@@ -351,6 +378,71 @@ private final class NotchPanel: NSObject, @preconcurrency SPUStandardUserDriverD
     }
 
     @objc private func quit() { NSApp.terminate(nil) }
+}
+
+private final class UpdateMenuItemView: NSView, NSMenuDelegate {
+    private weak var item: NSMenuItem?
+    private let font = NSFont.menuFont(ofSize: 0)
+    private let inset: CGFloat = 12
+    private let dotSize: CGFloat = 6
+    private var highlighted = false
+
+    init(item: NSMenuItem) {
+        self.item = item
+        let titleWidth = (item.title as NSString).size(withAttributes: [.font: font]).width
+        super.init(frame: NSRect(x: 0, y: 0, width: ceil(titleWidth) + 2 * inset + 22 + dotSize, height: 24))
+        autoresizingMask = [.width]
+        setAccessibilityElement(false)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let item else { return }
+        if highlighted {
+            NSColor.selectedContentBackgroundColor.setFill()
+            NSBezierPath(roundedRect: bounds, xRadius: 5, yRadius: 5).fill()
+        }
+        let color: NSColor = if !item.isEnabled {
+            .disabledControlTextColor
+        } else if highlighted {
+            .alternateSelectedControlTextColor
+        } else {
+            .labelColor
+        }
+        let title = NSAttributedString(string: item.title, attributes: [.font: font, .foregroundColor: color])
+        title.draw(at: NSPoint(x: inset, y: (bounds.height - title.size().height) / 2))
+
+        let lime = TrailGeometry.lime
+        NSColor(srgbRed: lime.red, green: lime.green, blue: lime.blue, alpha: 1).setFill()
+        NSBezierPath(ovalIn: NSRect(x: bounds.maxX - inset - dotSize, y: bounds.midY - dotSize / 2,
+                                    width: dotSize, height: dotSize)).fill()
+    }
+
+    func menu(_ menu: NSMenu, willHighlight item: NSMenuItem?) {
+        highlighted = self.item === item && item?.isEnabled == true
+        needsDisplay = true
+    }
+
+    override func mouseDown(with event: NSEvent) {}
+
+    override func mouseUp(with event: NSEvent) {
+        guard bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
+        activate()
+    }
+
+    override func keyDown(with event: NSEvent) {
+        switch event.charactersIgnoringModifiers {
+        case "\r", "\u{3}", " ": activate()
+        default: super.keyDown(with: event)
+        }
+    }
+
+    private func activate() {
+        guard let item, item.isEnabled, let menu = item.menu else { return }
+        menu.cancelTracking()
+        menu.performActionForItem(at: menu.index(of: item))
+    }
 }
 
 private final class NotchHostingView: NSHostingView<NotchView> {

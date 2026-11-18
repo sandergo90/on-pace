@@ -11,6 +11,27 @@ enum UsageFormat {
         date.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).locale(Locale(identifier: "en_GB")))
     }
 
+    static func lastUpdateCheck(
+        _ date: Date?, now: Date, calendar: Calendar = .current, locale: Locale = .current
+    ) -> String {
+        guard let date else { return "Not checked yet" }
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        if calendar.isDate(date, inSameDayAs: now) {
+            formatter.setLocalizedDateFormatFromTemplate("HHmm")
+            return "Last checked today at \(formatter.string(from: date))"
+        }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
+           calendar.isDate(date, inSameDayAs: yesterday) {
+            formatter.setLocalizedDateFormatFromTemplate("HHmm")
+            return "Last checked yesterday at \(formatter.string(from: date))"
+        }
+        formatter.setLocalizedDateFormatFromTemplate("dMMM")
+        return "Last checked \(formatter.string(from: date))"
+    }
+
     static func weekday(_ date: Date) -> String {
         date.formatted(.dateTime.weekday(.abbreviated).locale(locale))
     }
