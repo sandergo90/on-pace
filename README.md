@@ -71,7 +71,7 @@ git tag -a v0.1.4 -m 'On pace. 0.1.4'
 git push origin v0.1.4
 ```
 
-GitHub Actions builds the universal app, signs and notarizes it, and publishes the ZIP as a stable release. If a run fails, fix the cause and rerun the workflow from the **Actions** tab.
+GitHub Actions builds the universal app, signs and notarizes it, and publishes the ZIP as a stable release. If a run fails because of missing credentials or a temporary service error, fix the issue and rerun it from the **Actions** tab.
 
 Set these secrets in the [macos-release environment](https://github.com/sandergo90/on-pace/settings/environments) before pushing the first automated release tag.
 

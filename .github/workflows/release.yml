@@ -48,7 +48,8 @@ jobs:
           release=$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases" |
             jq -c --arg tag "$GITHUB_REF_NAME" 'first(.[][] | select(.tag_name == $tag and (.draft | not))) // null')
           if [[ "$release" != null ]]; then
-            if jq -e --arg zip "On-pace-$version-macOS.zip" +              '(.prerelease | not) and any(.assets[]; .name == $zip and .state == "uploaded")' <<< "$release" >/dev/null; then
+            if jq -e --arg zip "On-pace-$version-macOS.zip" \
+              '(.prerelease | not) and any(.assets[]; .name == $zip and .state == "uploaded")' <<< "$release" >/dev/null; then
               echo "$GITHUB_REF_NAME already has a stable release with the macOS ZIP."
               exit 0
             fi
