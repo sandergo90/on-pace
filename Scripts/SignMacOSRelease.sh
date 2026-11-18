@@ -49,7 +49,16 @@ if [[ -z "$identity" ]]; then
     exit 1
 fi
 
+# codesign requires the temporary keychain in the user search list.
+user_keychains=$(security list-keychains -d user)
+signing_keychains=("$keychain")
+while IFS= read -r entry; do
+    signing_keychains+=("$entry")
+done < <(printf '%s\n' "$user_keychains" | sed -nE 's/^[[:space:]]*"(.*)"$/\1/p')
+security list-keychains -d user -s "${signing_keychains[@]}"
 codesign --sign "$identity" --keychain "$keychain" --options runtime --timestamp "$app"
+security delete-keychain "$keychain"
+
 codesign --verify --deep --strict "$app"
 ditto -c -k --sequesterRsrc --keepParent "$app" "$scratch_dir/Notarization.zip"
 
