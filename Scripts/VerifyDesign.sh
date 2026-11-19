@@ -40,7 +40,7 @@ extension SettingsView {
         presentation.updateVersion = availableVersion
         var view = Self(store: store, updates: updates, presentation: presentation,
                         setAutomaticChecks: { updates.automaticallyChecks = $0 }, checkForUpdates: {},
-                        version: "0.1.5")
+                        version: "0.1.6")
         view._selectedTab = State(initialValue: tab)
         return view
     }

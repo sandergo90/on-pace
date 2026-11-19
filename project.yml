@@ -21,8 +21,8 @@ targets:
         LSApplicationCategoryType: public.app-category.developer-tools
         NSPrefersDisplaySafeAreaCompatibilityMode: false
         CFBundleDisplayName: "On pace."
-        CFBundleShortVersionString: "0.1.5"
-        CFBundleVersion: "6"
+        CFBundleShortVersionString: "0.1.6"
+        CFBundleVersion: "7"
         SUFeedURL: https://github.com/sandergo90/on-pace/releases/latest/download/appcast.xml
         SUPublicEDKey: JlL2t8WvarlyGuwhljvbEOYLkNaHKGrxwtKvswXMFro=
         SUEnableAutomaticChecks: true

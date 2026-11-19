@@ -65,13 +65,13 @@ If you edit `project.yml`, run `xcodegen generate` to refresh the Xcode project.
 
 ## Publish a release
 
-Update the app version and increase the build number in `project.yml` in a pull request. Run `xcodegen generate` to update `UsageNotch/Info.plist`. After merging the pull request, tag the merged commit with the matching version and push the tag. For example, use `v0.1.5` for app version `0.1.5`.
+Update the app version and increase the build number in `project.yml` in a pull request. Run `xcodegen generate` to update `UsageNotch/Info.plist`. After merging the pull request, tag the merged commit with the matching version and push the tag. For example, use `v0.1.6` for app version `0.1.6`.
 
 ```sh
 git switch main
 git pull --ff-only
-git tag -a v0.1.5 -m 'On pace. 0.1.5'
-git push origin v0.1.5
+git tag -a v0.1.6 -m 'On pace. 0.1.6'
+git push origin v0.1.6
 ```
 
 GitHub Actions builds, signs, and notarizes the universal app. It publishes the ZIP and the signed Sparkle update feed together as a stable release. If a run fails because of missing credentials or a temporary service error, fix the issue and rerun it from the **Actions** tab.
