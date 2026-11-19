@@ -153,7 +153,7 @@ struct NotchView: View {
                         if !reading.detailLimits.isEmpty {
                             VStack(spacing: 12) {
                                 ForEach(reading.detailLimits.prefix(2)) { limit in
-                                    quotaRow(limit, provider: provider)
+                                    quotaRow(limit, provider: provider, pace: stale ? nil : limit.pace(at: now))
                                 }
                             }
                         }
@@ -188,25 +188,44 @@ struct NotchView: View {
 
     private func headline(_ quota: QuotaWindow, provider: Provider, stale: Bool, now: Date) -> some View {
         let reached = quota.level == .reached && (quota.resetsAt.map { $0 > now } ?? true)
+        let pace = stale ? nil : quota.pace(at: now)
+        let projected = pace?.projectedFraction
+        let ringSize: CGFloat = 84
+        let ringWidth: CGFloat = 8
         return HStack(spacing: 16) {
             ZStack {
-                Circle().strokeBorder(.white.opacity(0.09), lineWidth: 8)
+                Circle().strokeBorder(.white.opacity(0.09), lineWidth: ringWidth)
+                if let projected, projected > quota.fractionUsed {
+                    Circle()
+                        .trim(from: quota.fractionUsed, to: projected)
+                        .stroke(provider.tint.opacity(0.34), style: StrokeStyle(lineWidth: ringWidth, lineCap: .butt))
+                        .rotationEffect(.degrees(-90))
+                        .padding(ringWidth / 2)
+                }
                 if quota.fractionUsed > 0 {
                     Throb(enabled: reached && !stale && expanded) {
                         Circle()
                             .trim(from: 0, to: quota.fractionUsed)
-                            .stroke(provider.tint, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                            .stroke(provider.tint, style: StrokeStyle(lineWidth: ringWidth, lineCap: .round))
                             .rotationEffect(.degrees(-90))
-                            .padding(4)
+                            .padding(ringWidth / 2)
                             .shadow(
                                 color: provider.tint.opacity(quota.level == .normal || stale ? 0 : 0.60),
                                 radius: reached ? 10 : 7
                             )
                     }
                 }
+                if let projected, projected < 1, projected > quota.fractionUsed {
+                    Capsule()
+                        .fill(.white.opacity(0.92))
+                        .frame(width: 2.25, height: ringWidth + 6)
+                        .offset(y: -(ringSize - ringWidth) / 2)
+                        .frame(width: ringSize, height: ringSize)
+                        .rotationEffect(.degrees(360 * projected))
+                }
                 Text(quota.percentage).font(.system(size: 22, weight: .bold))
             }
-            .frame(width: 84, height: 84)
+            .frame(width: ringSize, height: ringSize)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(quota.durationMinutes == 300 ? "5-hour session" : "Weekly limit").font(.system(size: 11.5)).foregroundStyle(secondary)
@@ -222,12 +241,8 @@ struct NotchView: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
                 }
-                if quota.durationMinutes != 300 {
-                    Text("No 5-hour window reported")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(.white.opacity(0.45))
-                } else if !stale, let pace = quota.pace(at: now) {
-                    let emphasis = pace != .comfortable
+                if let pace {
+                    let emphasis = pace.isEmphasized
                     let ink = emphasis ? provider.tint : .white.opacity(0.75)
                     HStack(spacing: 5) {
                         Image(systemName: "chart.line.uptrend.xyaxis")
@@ -242,17 +257,21 @@ struct NotchView: View {
                     .padding(.trailing, 9)
                     .padding(.vertical, 3)
                     .background(emphasis ? provider.tint.opacity(0.16) : .white.opacity(0.07), in: Capsule())
+                } else if quota.durationMinutes != 300 {
+                    Text("No 5-hour window reported")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.white.opacity(0.45))
                 }
             }
             Spacer(minLength: 0)
         }
-        .frame(height: 84)
+        .frame(height: ringSize)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(provider.name) \(quota.durationMinutes == 300 ? "5-hour session" : "weekly limit") \(quota.percentage) used")
+        .accessibilityLabel("\(provider.name) \(quota.durationMinutes == 300 ? "5-hour session" : "weekly limit") \(quota.percentage) used\(pace?.accessibilitySuffix ?? "")")
         .accessibilityValue(quota.resetsAt.map { "Resets \(UsageFormat.weekday($0)) \(UsageFormat.time($0))" } ?? "")
     }
 
-    private func quotaRow(_ quota: QuotaWindow, provider: Provider) -> some View {
+    private func quotaRow(_ quota: QuotaWindow, provider: Provider, pace: QuotaPace?) -> some View {
         VStack(spacing: 6) {
             HStack(spacing: 4) {
                 Text(quota.title).foregroundStyle(.white.opacity(0.85))
@@ -267,10 +286,17 @@ struct NotchView: View {
             .lineLimit(1)
             .minimumScaleFactor(0.83)
             GeometryReader { geometry in
+                let fillWidth = quota.fillWidth(in: geometry.size.width, minimum: 4)
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 3).fill(.white.opacity(0.08))
                     RoundedRectangle(cornerRadius: 3).fill(provider.tint)
-                        .frame(width: quota.fillWidth(in: geometry.size.width, minimum: 4))
+                        .frame(width: fillWidth)
+                }
+                .overlay {
+                    if let projected = pace?.projectedFraction {
+                        QuotaForecastBar(projected: projected, fillWidth: fillWidth, tint: provider.tint.opacity(0.34),
+                                         tickSize: CGSize(width: 2, height: 10))
+                    }
                 }
             }
             .frame(height: 6)

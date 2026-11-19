@@ -14,18 +14,15 @@ enum VerifyDesign {
         let store = UsageStore(preferences: preferences)
         verifyUpdateCheckDates()
         let now = Date.now
-        func quota(_ id: String, _ title: String, _ used: Double, _ minutes: Int) -> QuotaWindow {
+        func quota(_ id: String, _ title: String, _ used: Double, _ minutes: Int, elapsed: Double) -> QuotaWindow {
             QuotaWindow(id, title: title, used: used,
-                        resetsAt: now.addingTimeInterval(minutes == 300 ? 6_120 : 400_000),
+                        resetsAt: now.addingTimeInterval((Double(minutes) * (1 - elapsed) * 60).rounded()),
                         durationMinutes: minutes)!
         }
-        let session = quota("session", "5-hour session", 99, 300)
-        let weekly = quota("week", "Weekly · all models", 4, 10_080)
-        let opus = quota("opus", "Weekly · Opus", 0.1, 10_080)
-        let monday = Calendar(identifier: .gregorian).nextDate(
-            after: now, matching: DateComponents(hour: 6, minute: 0, weekday: 2), matchingPolicy: .nextTime
-        )!
-        let codexWeek = QuotaWindow("secondary", title: "Weekly limit", used: 5, resetsAt: monday, durationMinutes: 10_080)!
+        let session = quota("session", "5-hour session", 62, 300, elapsed: 0.72)
+        let weekly = quota("week", "Weekly · all models", 28, 10_080, elapsed: 0.45)
+        let opus = quota("opus", "Weekly · Opus", 8, 10_080, elapsed: 0.10)
+        let codexWeek = quota("secondary", "Weekly limit", 17, 10_080, elapsed: 0.45)
         let claude = UsageReading(windows: [session, weekly, opus], plan: "Max 20×")!
         let codex = UsageReading(windows: [codexWeek], plan: "Pro Lite")!
         store.record(claude, for: .claude)
@@ -43,7 +40,7 @@ enum VerifyDesign {
         precondition(claude.reportedLimitsDescription == "5-hour session and weekly limits")
         precondition(codex.reportedLimitsDescription == "weekly limit")
         for used in [0.0, 0.01, 1, 99, 100] {
-            let window = quota("test", "Test", used, 300)
+            let window = quota("test", "Test", used, 300, elapsed: 0.72)
             let compactFill = window.fillWidth(in: 30, minimum: 3)
             let panelFill = window.fillWidth(in: 280, minimum: 4)
             precondition(used == 0 ? compactFill == 0 && panelFill == 0 : compactFill >= 3 && panelFill >= 4)
@@ -87,7 +84,7 @@ enum VerifyDesign {
         try await capture(collapsed(flatScreen), name: "pill-both", output: output)
         try await capture(panel(), name: "panel-both", output: output)
         try await capture(panel(flatScreen), name: "panel-pill-both", output: output)
-        let sonnet = quota("sonnet", "Weekly · Sonnet", 8, 10_080)
+        let sonnet = quota("sonnet", "Weekly · Sonnet", 8, 10_080, elapsed: 0.45)
         store.record(UsageReading(windows: [session, weekly, opus, sonnet], plan: "Max 20×")!, for: .claude)
         try await capture(panel(), name: "panel-all-claude-limits", output: output)
         try await capture(SettingsView.verification(store: store, tab: .general), name: "settings-general", output: output)
@@ -100,9 +97,14 @@ enum VerifyDesign {
         precondition(UsagePreferences(defaults: defaults).enabledProviders == [.codex])
         preferences.setEnabled(false, for: .codex)
         precondition(preferences.enabledProviders == [.codex])
-        precondition(codexWeek.compactReset(at: now)?.text == "Mon 06:00")
+        let monday = Calendar.current.nextDate(
+            after: now, matching: DateComponents(hour: 6, minute: 0, weekday: 2), matchingPolicy: .nextTime
+        )!
+        precondition(CompactQuotaReset.weekly(monday).text == "Mon 06:00")
+        precondition(CompactQuotaReset.weekly(monday).spoken == "resets Monday 06:00")
+        let codexReset = codexWeek.compactReset(at: now)!.spoken
         precondition(strip(cameraScreen).accessibilitySummary
-            == "AI usage: Codex 5% of weekly limit, resets Monday 06:00. Show details")
+            == "AI usage: Codex 17% of weekly limit, \(codexReset), on pace for about 38% by reset. Show details")
         for period in HistoryPeriod.allCases {
             let history = UsageHistory(snapshot: snapshot, period: period, providers: preferences.enabledProviders)
             precondition(Array(history.values.keys) == [.codex])
@@ -117,10 +119,10 @@ enum VerifyDesign {
         try await capture(SettingsView.verification(store: store, tab: .providers), name: "settings-providers-codex", output: output)
         preferences.setEnabled(true, for: .claude)
         preferences.setEnabled(false, for: .codex)
-        precondition(session.compactReset(at: now)?.text == "1h 42m")
-        precondition(session.compactReset(at: now.addingTimeInterval(3_600))?.text == "42m")
+        precondition(session.compactReset(at: now)?.text == "1h 24m")
+        precondition(session.compactReset(at: now.addingTimeInterval(3_600))?.text == "24m")
         precondition(strip(cameraScreen).accessibilitySummary
-            == "AI usage: Claude 99% of 5-hour session, resets in 1 hour 42 minutes. Show details")
+            == "AI usage: Claude 62% of 5-hour session, resets in 1 hour 24 minutes, on pace for about 86% by reset. Show details")
         try await capture(collapsed(cameraScreen), name: "notch-claude", output: output)
         try await capture(collapsed(flatScreen), name: "pill-claude", output: output)
         try await capture(panel(), name: "panel-claude", output: output)
@@ -131,6 +133,14 @@ enum VerifyDesign {
         precondition(UsagePreferences(defaults: defaults).preferredDisplay == "verification-display")
         preferences.preferredDisplay = ""
         try await capture(SettingsView.verification(store: store, tab: .general), name: "settings-click-to-open", output: output)
+
+        preferences.setEnabled(true, for: .codex)
+        let early = quota("session", "5-hour session", 24, 300, elapsed: 0.10)
+        let onPaceToHit = quota("secondary", "Weekly limit", 65, 10_080, elapsed: 0.45)
+        store.record(UsageReading(windows: [early], plan: "Max 20×")!, for: .claude)
+        store.record(UsageReading(windows: [onPaceToHit], plan: "Pro Lite")!, for: .codex)
+        try await capture(panel(), name: "panel-forecast-states", output: output)
+        try await capture(collapsed(cameraScreen), name: "notch-forecast-states", output: output)
         print("PASS: layout and quota window selection, reset text and narration, minimum fills, provider persistence, last-provider guard, history filtering and totals, update check dates")
     }
 

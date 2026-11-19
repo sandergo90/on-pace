@@ -49,18 +49,19 @@ struct QuotaWindow: Identifiable, Sendable {
     }
 
     func pace(at now: Date) -> QuotaPace? {
-        guard durationMinutes == 300 else { return nil }
+        guard let durationMinutes, durationMinutes > 0 else { return nil }
         if level == .reached { return .reached }
         guard let resetsAt, resetsAt > now else { return nil }
-        let elapsed = 5 * 3600 - resetsAt.timeIntervalSince(now)
-        guard elapsed >= 45 * 60 else { return nil }
-        let projected = used * 5 * 3600 / elapsed
-        if projected < 75 { return .comfortable }
+        let duration = Double(durationMinutes) * 60
+        let elapsed = duration - resetsAt.timeIntervalSince(now)
+        guard elapsed >= duration * 0.15 else { return nil }
+        let projected = used * duration / elapsed
         if projected >= 100 {
             let predicted = now.addingTimeInterval((100 - used) * elapsed / used)
-            return .limitAt(predicted)
+            let showWeekday = durationMinutes == 10_080 && !Calendar.current.isDate(predicted, inSameDayAs: now)
+            return .limitAt(projected: projected, date: predicted, showWeekday: showWeekday)
         }
-        return .projected(Int(projected.rounded()))
+        return .projected(projected)
     }
 
     var percentage: String {
@@ -103,15 +104,41 @@ enum CompactQuotaReset {
     }
 }
 
-enum QuotaPace: Equatable {
-    case comfortable, projected(Int), limitAt(Date), reached
+enum QuotaPace {
+    case projected(Double)
+    case limitAt(projected: Double, date: Date, showWeekday: Bool)
+    case reached
+
+    var projectedPercentage: Double? {
+        switch self {
+        case .projected(let percentage), .limitAt(let percentage, _, _): percentage
+        case .reached: nil
+        }
+    }
+
+    var projectedFraction: Double? {
+        projectedPercentage.map { min($0, 100) / 100 }
+    }
+
+    var isEmphasized: Bool {
+        projectedPercentage.map { $0 >= 75 } ?? true
+    }
 
     var title: String {
         switch self {
-        case .comfortable: "Well within limit"
-        case .projected(let level): "On pace for ~\(level)% by reset"
-        case .limitAt(let date): "On pace to hit limit ~\(UsageFormat.time(date))"
+        case .projected(let percentage):
+            isEmphasized ? "On pace for ~\(Int(percentage.rounded()))% by reset" : "Well within limit"
+        case .limitAt(_, let date, let showWeekday):
+            "On pace to hit limit ~\(showWeekday ? UsageFormat.weekday(date) + " " : "")\(UsageFormat.time(date))"
         case .reached: "Limit reached"
+        }
+    }
+
+    var accessibilitySuffix: String {
+        switch self {
+        case .projected(let percentage): ", on pace for about \(Int(percentage.rounded()))% by reset"
+        case .limitAt: ", on pace to reach the limit before reset"
+        case .reached: ""
         }
     }
 }

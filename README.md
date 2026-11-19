@@ -40,6 +40,7 @@ Use macOS 14 or later on a Mac with Apple silicon or an Intel processor. Install
 - Open **Update Available** and choose **Install Update**. On pace. verifies the download and lets you install it and relaunch.
 - On a display without a camera notch, a compact notch shape sits at the top edge, within the menu bar's height.
 - The small `5h` and `wk` labels identify the period beside each percentage. The panel shows the same limit in its ring.
+- A dimmer stretch shows projected usage at reset, and a white tick marks where it ends.
 - In **Settings > Providers**, choose which providers appear in the notch, panel, and history. At least one stays on.
 - In **Settings > General > Display**, choose the primary display or a specific monitor. The app remembers your choice and uses the primary display when that monitor is disconnected.
 

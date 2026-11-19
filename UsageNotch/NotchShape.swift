@@ -252,13 +252,14 @@ struct EdgeLight: View {
     private func bar(_ quota: QuotaWindow, provider: Provider, mirrored: Bool) -> some View {
         let isStale = stale(provider)
         let reached = quota.level == .reached && (quota.resetsAt.map { $0 > now } ?? true)
+        let fillWidth = quota.fillWidth(in: Self.barWidth, minimum: 3)
         return ZStack(alignment: mirrored ? .trailing : .leading) {
             Capsule().fill(.white.opacity(0.16))
             if quota.fractionUsed > 0 {
                 Throb(enabled: reached && !isStale && animateHighlights) {
                     Capsule()
                         .fill(provider.tint)
-                        .frame(width: quota.fillWidth(in: Self.barWidth, minimum: 3), height: 4)
+                        .frame(width: fillWidth, height: 4)
                         .shadow(
                             color: provider.tint.opacity(quota.level == .normal || isStale ? 0 : 0.8),
                             radius: reached ? 8 : 5
@@ -267,6 +268,12 @@ struct EdgeLight: View {
             }
         }
         .frame(width: Self.barWidth, height: 4)
+        .overlay {
+            if !isStale, let projected = quota.pace(at: now)?.projectedFraction {
+                QuotaForecastBar(projected: projected, fillWidth: fillWidth, tint: provider.tint.opacity(0.4),
+                                 tickSize: CGSize(width: 1.5, height: 8), mirrored: mirrored)
+            }
+        }
         .overlay {
             if animateHighlights && !reduceMotion {
                 ResetRipple(provider: provider, mirrored: mirrored, reset: store.compactQuotaResets[provider])
@@ -285,13 +292,45 @@ struct EdgeLight: View {
             guard let quota = store.state(for: provider).reading?.compactQuota else {
                 return "\(provider.name) usage unavailable"
             }
-            let age = stale(provider) ? ", last known reading" : ""
+            let isStale = stale(provider)
+            let age = isStale ? ", last known reading" : ""
             let period = quota.durationMinutes == 300 ? "5-hour session" : "weekly limit"
             let reset = onlyProvider == provider ? self.reset(for: provider).map { ", \($0.spoken)" } ?? "" : ""
-            return "\(provider.name) \(quota.percentage) of \(period)\(age)\(reset)"
+            let forecast = isStale ? "" : quota.pace(at: now)?.accessibilitySuffix ?? ""
+            return "\(provider.name) \(quota.percentage) of \(period)\(age)\(reset)\(forecast)"
         }
         let readings = descriptions.isEmpty ? "no readings" : descriptions.joined(separator: ", ")
         return "AI usage: \(readings)." + (action == nil ? "" : " Show details")
+    }
+}
+
+struct QuotaForecastBar: View {
+    let projected: Double
+    let fillWidth: CGFloat
+    let tint: Color
+    let tickSize: CGSize
+    var mirrored = false
+
+    var body: some View {
+        GeometryReader { geometry in
+            let width = geometry.size.width
+            let height = geometry.size.height
+            let stop = width * projected
+            let stretch = max(0, stop - fillWidth)
+            let edge = mirrored ? width - stop : stop
+
+            Rectangle()
+                .fill(tint)
+                .frame(width: stretch, height: height)
+                .position(x: edge + (mirrored ? stretch / 2 : -stretch / 2), y: height / 2)
+                .clipShape(Capsule())
+            if projected < 1 && stop > fillWidth {
+                Rectangle()
+                    .fill(.white.opacity(0.92))
+                    .frame(width: tickSize.width, height: tickSize.height)
+                    .position(x: edge, y: height / 2)
+            }
+        }
     }
 }
 
