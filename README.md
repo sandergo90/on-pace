@@ -20,7 +20,7 @@ Hover over the notch to see reset times, recent activity, and usage history.
   <img src="docs/images/on-pace-0.1.2-detail.png" width="820" alt="Expanded panel showing a Claude session ring and a Codex weekly limit ring, alongside activity charts and seven-day history">
 </p>
 
-The screenshots show sample usage. The Codex ring shows the weekly limit when a five-hour limit is unavailable.
+The screenshots show sample usage from version 0.1.2.
 
 ## Install
 
@@ -32,15 +32,17 @@ Use macOS 14 or later on a Mac with Apple silicon or an Intel processor. Install
 
 ## Use the notch
 
-- The notch shows the reported five-hour limit, or the weekly limit when the five-hour limit is unavailable.
+- The notch shows the reported weekly limit, with the five-hour limit as a fallback.
 - Hover for the breakdown. Click the notch or use the pin to keep it open.
+- The white tick marks how much of the quota window has elapsed. When the colored fill extends to the right of the tick, usage is running ahead of pace.
+- The panel estimates when the limit will be hit or how much quota will be left at reset, using the average rate since the window started.
+- Use the expand button or **Usage Dashboard** in the gear menu to open the dashboard in its own window.
 - Choose **7 days** or **30 days** to compare activity with the preceding period. The app remembers your choice.
 - Use the gear menu to open **Settings…**, **About On pace.**, **Check for Updates…**, or quit.
 - On pace. checks for stable releases at launch and about once a day while running. A dot on the gear shows when an update is available.
 - Open **Update Available** and choose **Install Update**. On pace. verifies the download and lets you install it and relaunch.
 - On a display without a camera notch, a compact notch shape sits at the top edge, within the menu bar's height.
-- The small `5h` and `wk` labels identify the period beside each percentage. The panel shows the same limit in its ring.
-- A dimmer stretch shows projected usage at reset, and a white tick marks where it ends.
+- The small `5h` and `wk` labels identify the period beside each percentage. The panel shows the same limit in its main bar, with additional reported limits below it.
 - In **Settings > Providers**, choose which providers appear in the notch, panel, and history. At least one stays on.
 - In **Settings > General > Display**, choose the primary display or a specific monitor. The app remembers your choice and uses the primary display when that monitor is disconnected.
 

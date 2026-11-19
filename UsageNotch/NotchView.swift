@@ -3,16 +3,18 @@ import SwiftUI
 struct NotchView: View {
     let store: UsageStore
     let compactStyle: CompactStyle
-    let detailWidth: CGFloat
+    let detailSize: CGSize
     let presentation: NotchPresentation
     let togglePin: () -> Void
+    let openDashboard: () -> Void
     let openSettings: () -> Void
     let compactWidthChanged: (CGFloat) -> Void
+    let expandedHeightChanged: (CGFloat) -> Void
+    @State private var dashboardHeight: CGFloat?
 
     private var expanded: Bool { presentation.expanded }
     private var pinned: Bool { presentation.pinned }
     private let secondary = Color.white.opacity(0.62)
-    private let surface = Color(red: 18 / 255, green: 18 / 255, blue: 20 / 255)
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: expanded ? 1 : 5)) { timeline in
@@ -25,7 +27,8 @@ struct NotchView: View {
                     .accessibilityHidden(expanded)
 
                 details(at: timeline.date)
-                    .frame(width: detailWidth, height: NotchShape.expandedHeight, alignment: .top)
+                    .onGeometryChange(for: CGFloat.self, of: { $0.size.height }, action: expandedHeightChanged)
+                    .frame(width: detailSize.width, height: detailSize.height, alignment: .top)
                     .offset(y: expanded ? 0 : 8)
                     .opacity(expanded ? 1 : 0)
                     .animation(presentation.animates ? .easeOut(duration: expanded ? 0.19 : 0.11)
@@ -75,6 +78,7 @@ struct NotchView: View {
                     .lineLimit(1)
                 control("arrow.clockwise", label: "Refresh usage", action: store.refresh)
                     .disabled(store.isRefreshing)
+                control("arrow.up.left.and.arrow.down.right", label: String(localized: "dashboard.open"), action: openDashboard)
                 control("gearshape", label: updateAvailable ? "Settings, update available" : "Settings", action: openSettings)
                     .overlay(alignment: .topTrailing) {
                         if updateAvailable {
@@ -94,24 +98,67 @@ struct NotchView: View {
             .padding(.horizontal, 4)
             .frame(height: 34)
 
-            HStack(alignment: .top, spacing: 12) {
-                ForEach(store.preferences.enabledProviders) { card($0, at: now) }
+            ScrollView {
+                UsageDashboard(store: store, now: now, animateHighlights: expanded)
+                    .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { dashboardHeight = $0 }
             }
-
-            UsageHistoryView(snapshot: store.history, providers: store.preferences.enabledProviders)
-                .fixedSize(horizontal: false, vertical: true)
+            .frame(maxHeight: dashboardHeight)
         }
         .padding(.horizontal, NotchShape.expandedShoulderWidth + 20)
         .padding(.bottom, 18)
     }
 
-    private func card(_ provider: Provider, at now: Date) -> some View {
+    private func control(_ icon: String, label: String, selected: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.white.opacity(selected ? 1 : 0.77))
+                .frame(width: 24, height: 24)
+                .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 7))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(label)
+        .accessibilityLabel(label)
+    }
+
+    private func syncStatus(at now: Date) -> String {
+        if store.isRefreshing { return "Syncing…" }
+        guard let updated = store.lastUpdated ?? store.history?.at else { return "Waiting for data" }
+        let elapsed = Int(max(0, now.timeIntervalSince(updated)))
+        if elapsed < 60 { return "Synced \(elapsed)s ago" }
+        if elapsed < 3600 { return "Synced \(elapsed / 60)m ago" }
+        return "Synced at \(UsageFormat.time(updated))"
+    }
+}
+
+struct UsageDashboard: View {
+    let store: UsageStore
+    let now: Date
+    var animateHighlights = false
+    private let secondary = Color.white.opacity(0.62)
+    private let surface = Color(red: 18 / 255, green: 18 / 255, blue: 20 / 255)
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                ForEach(store.preferences.enabledProviders) { card($0) }
+            }
+            UsageHistoryView(snapshot: store.history, providers: store.preferences.enabledProviders)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .monospacedDigit()
+        .foregroundStyle(.white)
+        .environment(\.colorScheme, .dark)
+    }
+
+    private func card(_ provider: Provider) -> some View {
         let state = store.state(for: provider)
         let reading = state.reading
         let stale = reading?.isStale(at: now) == true
         let activity = store.history?.values[provider]
         return VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 9) {
                     ToolSymbol(provider: provider)
                         .frame(width: 26, height: 26)
@@ -146,14 +193,14 @@ struct NotchView: View {
                 .frame(height: 32)
 
                 if let reading {
-                    VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 12) {
                         if let quota = reading.compactQuota {
-                            headline(quota, provider: provider, stale: stale, now: now)
+                            headline(quota, provider: provider, sampledAt: reading.fetchedAt, stale: stale)
                         }
                         if !reading.detailLimits.isEmpty {
-                            VStack(spacing: 12) {
-                                ForEach(reading.detailLimits.prefix(2)) { limit in
-                                    quotaRow(limit, provider: provider, pace: stale ? nil : limit.pace(at: now))
+                            VStack(spacing: 10) {
+                                ForEach(reading.detailLimits) { limit in
+                                    quotaRow(limit, provider: provider, sampledAt: reading.fetchedAt, stale: stale)
                                 }
                             }
                         }
@@ -165,9 +212,9 @@ struct NotchView: View {
                 }
             }
 
-            Spacer(minLength: 16)
+            Spacer(minLength: 12)
 
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 12) {
                 ActivityChart(usage: activity, measuredAt: store.history?.at, tint: provider.tint)
                 if let activity {
                     HStack(spacing: 8) {
@@ -186,93 +233,46 @@ struct NotchView: View {
         .overlay { RoundedRectangle(cornerRadius: 18).strokeBorder(.white.opacity(0.07)).allowsHitTesting(false) }
     }
 
-    private func headline(_ quota: QuotaWindow, provider: Provider, stale: Bool, now: Date) -> some View {
-        let reached = quota.level == .reached && (quota.resetsAt.map { $0 > now } ?? true)
-        let pace = stale ? nil : quota.pace(at: now)
-        let projected = pace?.projectedFraction
-        let ringSize: CGFloat = 84
-        let ringWidth: CGFloat = 8
-        return HStack(spacing: 16) {
-            ZStack {
-                Circle().strokeBorder(.white.opacity(0.09), lineWidth: ringWidth)
-                if let projected, projected > quota.fractionUsed {
-                    Circle()
-                        .trim(from: quota.fractionUsed, to: projected)
-                        .stroke(provider.tint.opacity(0.34), style: StrokeStyle(lineWidth: ringWidth, lineCap: .butt))
-                        .rotationEffect(.degrees(-90))
-                        .padding(ringWidth / 2)
-                }
-                if quota.fractionUsed > 0 {
-                    Throb(enabled: reached && !stale && expanded) {
-                        Circle()
-                            .trim(from: 0, to: quota.fractionUsed)
-                            .stroke(provider.tint, style: StrokeStyle(lineWidth: ringWidth, lineCap: .round))
-                            .rotationEffect(.degrees(-90))
-                            .padding(ringWidth / 2)
-                            .shadow(
-                                color: provider.tint.opacity(quota.level == .normal || stale ? 0 : 0.60),
-                                radius: reached ? 10 : 7
-                            )
-                    }
-                }
-                if let projected, projected < 1, projected > quota.fractionUsed {
-                    Capsule()
-                        .fill(.white.opacity(0.92))
-                        .frame(width: 2.25, height: ringWidth + 6)
-                        .offset(y: -(ringSize - ringWidth) / 2)
-                        .frame(width: ringSize, height: ringSize)
-                        .rotationEffect(.degrees(360 * projected))
-                }
+    private func headline(_ quota: QuotaWindow, provider: Provider, sampledAt: Date, stale: Bool) -> some View {
+        let highlights = !stale && (quota.resetsAt.map { $0 > now } ?? true)
+        let marker = stale ? nil : quota.elapsedFraction(at: now)
+        let forecast = stale ? nil : quota.pace(sampledAt: sampledAt, now: now)
+        let reset = quota.compactReset(at: now)?.spoken
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(quota.durationMinutes == 300 ? "5-hour session" : "Weekly limit")
+                    .font(.system(size: 12, weight: .medium))
+                Spacer(minLength: 4)
                 Text(quota.percentage).font(.system(size: 22, weight: .bold))
             }
-            .frame(width: ringSize, height: ringSize)
+            QuotaBar(quota: quota, tint: provider.tint, pace: marker, highlights: highlights, animates: animateHighlights)
+                .frame(height: 8)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text(quota.durationMinutes == 300 ? "5-hour session" : "Weekly limit").font(.system(size: 11.5)).foregroundStyle(secondary)
+            HStack(spacing: 8) {
                 if quota.durationMinutes != 300, let reset = quota.resetsAt {
                     Text("Resets \(UsageFormat.weekday(reset)) \(UsageFormat.time(reset))")
-                        .font(.system(size: 17, weight: .semibold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
                 } else if let minutes = quota.minutesUntilReset(from: now) {
                     Text(minutes == 0 ? "Reset pending" :
                          "\(quota.level == .reached ? "Back in" : "Resets in") \(UsageFormat.duration(minutes))")
-                        .font(.system(size: 17, weight: .semibold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
                 }
-                if let pace {
-                    let emphasis = pace.isEmphasized
-                    let ink = emphasis ? provider.tint : .white.opacity(0.75)
-                    HStack(spacing: 5) {
-                        Image(systemName: "chart.line.uptrend.xyaxis")
-                            .accessibilityHidden(true)
-                        Text(pace.title)
-                    }
-                    .font(.system(size: 11, weight: .medium))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
-                    .foregroundStyle(ink)
-                    .padding(.leading, 7)
-                    .padding(.trailing, 9)
-                    .padding(.vertical, 3)
-                    .background(emphasis ? provider.tint.opacity(0.16) : .white.opacity(0.07), in: Capsule())
-                } else if quota.durationMinutes != 300 {
-                    Text("No 5-hour window reported")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(.white.opacity(0.45))
-                }
+                Spacer(minLength: 0)
+                if let forecast { forecastText(forecast) }
             }
-            Spacer(minLength: 0)
+            .font(.system(size: 11.5))
+            .foregroundStyle(secondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.85)
         }
-        .frame(height: ringSize)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(provider.name) \(quota.durationMinutes == 300 ? "5-hour session" : "weekly limit") \(quota.percentage) used\(pace?.accessibilitySuffix ?? "")")
-        .accessibilityValue(quota.resetsAt.map { "Resets \(UsageFormat.weekday($0)) \(UsageFormat.time($0))" } ?? "")
+        .accessibilityLabel("\(provider.name) \(quota.durationMinutes == 300 ? "5-hour session" : "weekly limit") \(quota.percentage) used")
+        .accessibilityValue([reset, marker.map(UsageFormat.paceMarker), forecast?.title(at: now)]
+            .compactMap { $0 }.joined(separator: ", "))
     }
 
-    private func quotaRow(_ quota: QuotaWindow, provider: Provider, pace: QuotaPace?) -> some View {
-        VStack(spacing: 6) {
+    private func quotaRow(_ quota: QuotaWindow, provider: Provider, sampledAt: Date, stale: Bool) -> some View {
+        let marker = stale ? nil : quota.elapsedFraction(at: now)
+        let forecast = stale ? nil : quota.pace(sampledAt: sampledAt, now: now)
+        return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 4) {
                 Text(quota.title).foregroundStyle(.white.opacity(0.85))
                 Spacer(minLength: 3)
@@ -285,24 +285,26 @@ struct NotchView: View {
             .font(.system(size: 12))
             .lineLimit(1)
             .minimumScaleFactor(0.83)
-            GeometryReader { geometry in
-                let fillWidth = quota.fillWidth(in: geometry.size.width, minimum: 4)
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 3).fill(.white.opacity(0.08))
-                    RoundedRectangle(cornerRadius: 3).fill(provider.tint)
-                        .frame(width: fillWidth)
-                }
-                .overlay {
-                    if let projected = pace?.projectedFraction {
-                        QuotaForecastBar(projected: projected, fillWidth: fillWidth, tint: provider.tint.opacity(0.34),
-                                         tickSize: CGSize(width: 2, height: 10))
-                    }
+            HStack(spacing: 9) {
+                QuotaBar(quota: quota, tint: provider.tint, pace: marker)
+                    .frame(height: 6)
+                if let forecast {
+                    forecastText(forecast)
+                        .frame(width: 115, alignment: .trailing)
                 }
             }
-            .frame(height: 6)
-            .accessibilityHidden(true)
         }
         .accessibilityElement(children: .combine)
+        .accessibilityHint(marker.map(UsageFormat.paceMarker) ?? "")
+    }
+
+    private func forecastText(_ forecast: QuotaPace) -> some View {
+        Text(forecast.title(at: now))
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(secondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.85)
+            .help(String(localized: "pace.explanation"))
     }
 
     private func metric(_ label: String, value: String, help: String) -> some View {
@@ -318,28 +320,5 @@ struct NotchView: View {
         .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 10))
         .help(help)
         .accessibilityElement(children: .combine)
-    }
-
-    private func control(_ icon: String, label: String, selected: Bool = false, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.white.opacity(selected ? 1 : 0.77))
-                .frame(width: 24, height: 24)
-                .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 7))
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(label)
-        .accessibilityLabel(label)
-    }
-
-    private func syncStatus(at now: Date) -> String {
-        if store.isRefreshing { return "Syncing…" }
-        guard let updated = store.lastUpdated ?? store.history?.at else { return "Waiting for data" }
-        let elapsed = Int(max(0, now.timeIntervalSince(updated)))
-        if elapsed < 60 { return "Synced \(elapsed)s ago" }
-        if elapsed < 3600 { return "Synced \(elapsed / 60)m ago" }
-        return "Synced at \(UsageFormat.time(updated))"
     }
 }

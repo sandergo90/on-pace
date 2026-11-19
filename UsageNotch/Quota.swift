@@ -48,20 +48,26 @@ struct QuotaWindow: Identifiable, Sendable {
         }
     }
 
-    func pace(at now: Date) -> QuotaPace? {
-        guard let durationMinutes, durationMinutes > 0 else { return nil }
-        if level == .reached { return .reached }
-        guard let resetsAt, resetsAt > now else { return nil }
+    func elapsedFraction(at date: Date) -> Double? {
+        guard let resetsAt, let durationMinutes, durationMinutes > 0 else { return nil }
         let duration = Double(durationMinutes) * 60
-        let elapsed = duration - resetsAt.timeIntervalSince(now)
-        guard elapsed >= duration * 0.15 else { return nil }
-        let projected = used * duration / elapsed
-        if projected >= 100 {
-            let predicted = now.addingTimeInterval((100 - used) * elapsed / used)
-            let showWeekday = durationMinutes == 10_080 && !Calendar.current.isDate(predicted, inSameDayAs: now)
-            return .limitAt(projected: projected, date: predicted, showWeekday: showWeekday)
+        let remaining = resetsAt.timeIntervalSince(date)
+        guard remaining > 0, remaining <= duration else { return nil }
+        return (duration - remaining) / duration
+    }
+
+    func pace(sampledAt: Date, now: Date) -> QuotaPace? {
+        guard elapsedFraction(at: now) != nil, let elapsed = elapsedFraction(at: sampledAt),
+              let durationMinutes else { return nil }
+        if level == .reached { return .reached }
+        guard elapsed > 0 else { return nil }
+        // The sample's usage and elapsed time must describe the same instant.
+        if fractionUsed > elapsed {
+            let elapsedSeconds = Double(durationMinutes) * 60 * elapsed
+            let untilLimit = elapsedSeconds * (1 - fractionUsed) / fractionUsed
+            return .limitAt(sampledAt.addingTimeInterval(untilLimit))
         }
-        return .projected(projected)
+        return .remaining(1 - fractionUsed / elapsed)
     }
 
     var percentage: String {
@@ -104,41 +110,21 @@ enum CompactQuotaReset {
     }
 }
 
-enum QuotaPace {
-    case projected(Double)
-    case limitAt(projected: Double, date: Date, showWeekday: Bool)
-    case reached
+enum QuotaPace: Equatable {
+    case remaining(Double), limitAt(Date), reached
 
-    var projectedPercentage: Double? {
+    func title(at date: Date) -> String {
         switch self {
-        case .projected(let percentage), .limitAt(let percentage, _, _): percentage
-        case .reached: nil
-        }
-    }
-
-    var projectedFraction: Double? {
-        projectedPercentage.map { min($0, 100) / 100 }
-    }
-
-    var isEmphasized: Bool {
-        projectedPercentage.map { $0 >= 75 } ?? true
-    }
-
-    var title: String {
-        switch self {
-        case .projected(let percentage):
-            isEmphasized ? "On pace for ~\(Int(percentage.rounded()))% by reset" : "Well within limit"
-        case .limitAt(_, let date, let showWeekday):
-            "On pace to hit limit ~\(showWeekday ? UsageFormat.weekday(date) + " " : "")\(UsageFormat.time(date))"
-        case .reached: "Limit reached"
-        }
-    }
-
-    var accessibilitySuffix: String {
-        switch self {
-        case .projected(let percentage): ", on pace for about \(Int(percentage.rounded()))% by reset"
-        case .limitAt: ", on pace to reach the limit before reset"
-        case .reached: ""
+        case .remaining(let fraction):
+            String.localizedStringWithFormat(String(localized: "pace.remaining"), UsageFormat.pacePercent(fraction))
+        case .limitAt(let limit):
+            String.localizedStringWithFormat(
+                String(localized: "pace.limitAt"),
+                Calendar.current.isDate(limit, inSameDayAs: date)
+                    ? UsageFormat.time(limit) : "\(UsageFormat.weekday(limit)) \(UsageFormat.time(limit))"
+            )
+        case .reached:
+            String(localized: "pace.reached")
         }
     }
 }
@@ -163,11 +149,13 @@ struct UsageReading: Sendable {
     }
 
     var compactQuota: QuotaWindow? {
-        session ?? otherLimits.first { $0.id != "cloud" && $0.durationMinutes == 10_080 }
+        otherLimits.first { $0.durationMinutes == 10_080 && ["week", "primary", "secondary"].contains($0.id) }
+            ?? session
     }
 
     var detailLimits: [QuotaWindow] {
-        otherLimits.filter { $0.id != compactQuota?.id }
+        let primaryID = compactQuota?.id
+        return ((session.map { [$0] } ?? []) + otherLimits).filter { $0.id != primaryID }
     }
 
     var reportedLimitsDescription: String {

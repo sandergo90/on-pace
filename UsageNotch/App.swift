@@ -75,6 +75,7 @@ private final class NotchPanel: NSObject, @preconcurrency SPUStandardUserDriverD
     private var updateObservations: [NSKeyValueObservation] = []
     private var placement: Placement?
     private var compactWidth: CGFloat = 0
+    private var expandedHeight: CGFloat = 0
     private var hoverTask: Task<Void, Never>?
     private var displayLink: CADisplayLink?
     private var globalMouseMonitor: Any?
@@ -85,6 +86,7 @@ private final class NotchPanel: NSObject, @preconcurrency SPUStandardUserDriverD
     private var menuOpen = false
     private var aboutWindow: NSWindow?
     private var settingsWindow: NSWindow?
+    private var dashboardWindow: NSWindow?
     private var opensOnHover: Bool {
         store.preferences.opensOnHover
     }
@@ -150,16 +152,19 @@ private final class NotchPanel: NSObject, @preconcurrency SPUStandardUserDriverD
         let placement = Placement(screen)
         self.placement = placement
         compactWidth = placement.compactStyle.notchWidth ?? 0
+        expandedHeight = placement.detailSize.height
         inside = false
         presentation.animates = false
         presentation.expanded = pinned
         panel.setFrame(placement.frame, display: false)
         let host = NotchHostingView(rootView: NotchView(
-            store: store, compactStyle: placement.compactStyle, detailWidth: placement.detailWidth,
+            store: store, compactStyle: placement.compactStyle, detailSize: placement.detailSize,
             presentation: presentation,
             togglePin: { [weak self] in self?.togglePin() },
+            openDashboard: { [weak self] in self?.showDashboard() },
             openSettings: { [weak self] in self?.settingsMenu() },
-            compactWidthChanged: { [weak self] in self?.updateCompactWidth($0) }
+            compactWidthChanged: { [weak self] in self?.updateCompactWidth($0) },
+            expandedHeightChanged: { [weak self] in self?.updateExpandedHeight($0) }
         ))
         host.sizingOptions = []
         surface.install(host)
@@ -177,8 +182,20 @@ private final class NotchPanel: NSObject, @preconcurrency SPUStandardUserDriverD
     }
 
     private func showShape(on placement: Placement, animated: Bool) {
-        surface.show(size: placement.size(expanded: expanded, compactWidth: compactWidth), style: placement.compactStyle,
-                     expanded: expanded, animated: animated)
+        let size = expanded
+            ? CGSize(width: placement.detailSize.width, height: expandedHeight)
+            : CGSize(width: compactWidth, height: placement.compactStyle.height)
+        surface.show(size: size, style: placement.compactStyle, expanded: expanded, animated: animated)
+    }
+
+    private func updateExpandedHeight(_ measured: CGFloat) {
+        guard let placement, measured > 0 else { return }
+        let height = min(ceil(measured), placement.detailSize.height)
+        guard height != expandedHeight else { return }
+        expandedHeight = height
+        guard expanded else { return }
+        showShape(on: placement, animated: false)
+        updatePointer()
     }
 
     private func updatePointer() {
@@ -241,6 +258,7 @@ private final class NotchPanel: NSObject, @preconcurrency SPUStandardUserDriverD
     private func settingsMenu() {
         let menu = NSMenu()
         menu.autoenablesItems = false
+        item(String(localized: "dashboard.title"), action: #selector(showDashboard), in: menu)
         item("Settings…", action: #selector(showSettings), in: menu).keyEquivalent = ","
         menu.addItem(.separator())
         item("About \(displayName)", action: #selector(showAbout), in: menu)
@@ -337,6 +355,33 @@ private final class NotchPanel: NSObject, @preconcurrency SPUStandardUserDriverD
         }
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    @objc private func showDashboard() {
+        if dashboardWindow == nil {
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: NotchShape.expandedWidth, height: NotchShape.expandedHeight),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false
+            )
+            window.title = String(localized: "dashboard.title")
+            window.contentMinSize = NSSize(width: 600, height: 400)
+            window.isReleasedWhenClosed = false
+            window.appearance = NSAppearance(named: .darkAqua)
+            window.contentViewController = NSHostingController(rootView:
+                TimelineView(.periodic(from: .now, by: 1)) { [store] timeline in
+                    ScrollView {
+                        UsageDashboard(store: store, now: timeline.date, animateHighlights: true)
+                            .padding(20)
+                    }
+                    .background(.black)
+                }
+            )
+            window.center()
+            dashboardWindow = window
+        }
+        if !pinned { setExpanded(false) }
+        NSApp.activate(ignoringOtherApps: true)
+        dashboardWindow?.makeKeyAndOrderFront(nil)
     }
 
     private func settingsChanged() {
@@ -458,17 +503,11 @@ private struct Placement {
     let centerX: CGFloat
     let top: CGFloat
     let compactStyle: CompactStyle
-    let detailWidth: CGFloat
-
-    func size(expanded: Bool, compactWidth: CGFloat) -> CGSize {
-        expanded
-            ? CGSize(width: detailWidth, height: NotchShape.expandedHeight)
-            : CGSize(width: compactWidth, height: compactStyle.height)
-    }
+    let detailSize: CGSize
 
     var frame: NSRect {
-        let width = detailWidth + 2 * NotchShape.shadowSide
-        let height = NotchShape.expandedHeight + NotchShape.shadowBottom
+        let width = detailSize.width + 2 * NotchShape.shadowSide
+        let height = detailSize.height + NotchShape.shadowBottom
         return NSRect(x: centerX - width / 2, y: top - height, width: width, height: height)
     }
 
@@ -481,7 +520,8 @@ private struct Placement {
         } else {
             centerX = screen.frame.midX
         }
-        detailWidth = min(NotchShape.expandedWidth, screen.frame.width - 20)
         top = screen.frame.maxY
+        detailSize = CGSize(width: min(NotchShape.expandedWidth, screen.frame.width - 20),
+                            height: min(NotchShape.expandedHeight, top - screen.visibleFrame.minY))
     }
 }

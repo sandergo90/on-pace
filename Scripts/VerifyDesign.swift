@@ -14,17 +14,18 @@ enum VerifyDesign {
         let store = UsageStore(preferences: preferences)
         verifyUpdateCheckDates()
         let now = Date.now
+        verifyPacing()
         func quota(_ id: String, _ title: String, _ used: Double, _ minutes: Int, elapsed: Double) -> QuotaWindow {
             QuotaWindow(id, title: title, used: used,
                         resetsAt: now.addingTimeInterval((Double(minutes) * (1 - elapsed) * 60).rounded()),
                         durationMinutes: minutes)!
         }
-        let session = quota("session", "5-hour session", 62, 300, elapsed: 0.72)
-        let weekly = quota("week", "Weekly · all models", 28, 10_080, elapsed: 0.45)
-        let opus = quota("opus", "Weekly · Opus", 8, 10_080, elapsed: 0.10)
-        let codexWeek = quota("secondary", "Weekly limit", 17, 10_080, elapsed: 0.45)
-        let claude = UsageReading(windows: [session, weekly, opus], plan: "Max 20×")!
-        let codex = UsageReading(windows: [codexWeek], plan: "Pro Lite")!
+        let session = quota("session", "5-hour session", 99, 300, elapsed: 0.66)
+        let weekly = quota("week", "Weekly · all models", 50, 10_080, elapsed: 0.5)
+        let opus = quota("opus", "Weekly · Opus", 0.1, 10_080, elapsed: 0.35)
+        let codexWeek = quota("secondary", "Weekly limit", 17, 10_080, elapsed: 0.75)
+        let claude = UsageReading(windows: [session, weekly, opus], plan: "Max 20×", fetchedAt: now)!
+        let codex = UsageReading(windows: [codexWeek], plan: "Pro Lite", fetchedAt: now)!
         store.record(claude, for: .claude)
         store.record(codex, for: .codex)
         let days = (-59...0).map { Calendar.current.date(byAdding: .day, value: $0, to: now)! }
@@ -34,9 +35,11 @@ enum VerifyDesign {
         ], days: days, at: now)
         store.loadVerificationHistory(snapshot)
 
-        precondition(claude.compactQuota?.id == session.id)
+        precondition(claude.compactQuota?.id == weekly.id)
         precondition(codex.compactQuota?.id == codexWeek.id && codex.detailLimits.isEmpty)
-        precondition(claude.detailLimits.map(\.id) == [weekly.id, opus.id])
+        precondition(claude.detailLimits.map(\.id) == [session.id, opus.id])
+        precondition(UsageReading(windows: [session, opus], plan: nil)?.compactQuota?.id == session.id)
+        precondition(UsageReading(windows: [opus], plan: nil)?.compactQuota == nil)
         precondition(claude.reportedLimitsDescription == "5-hour session and weekly limits")
         precondition(codex.reportedLimitsDescription == "weekly limit")
         for used in [0.0, 0.01, 1, 99, 100] {
@@ -65,10 +68,13 @@ enum VerifyDesign {
         }
         let presentation = NotchPresentation()
         presentation.expanded = true
-        func panel(_ style: CompactStyle = .previewNotch) -> some View {
-            NotchView(store: store, compactStyle: style, detailWidth: NotchShape.expandedWidth,
-                      presentation: presentation, togglePin: {}, openSettings: {}, compactWidthChanged: { _ in })
-                .frame(width: NotchShape.expandedWidth, height: NotchShape.expandedHeight)
+        func panel(_ style: CompactStyle = .previewNotch, height: CGFloat = NotchShape.expandedHeight,
+                   onHeight: @escaping (CGFloat) -> Void = { _ in }) -> some View {
+            let size = CGSize(width: NotchShape.expandedWidth, height: height)
+            return NotchView(store: store, compactStyle: style, detailSize: size, presentation: presentation,
+                             togglePin: {}, openDashboard: {}, openSettings: {}, compactWidthChanged: { _ in },
+                             expandedHeightChanged: onHeight)
+                .frame(width: size.width, height: size.height)
                 .background(.black)
         }
         func strip(_ style: CompactStyle, at date: Date = now) -> EdgeLight {
@@ -82,11 +88,27 @@ enum VerifyDesign {
         }
         try await capture(collapsed(cameraScreen), name: "notch-both", output: output)
         try await capture(collapsed(flatScreen), name: "pill-both", output: output)
+        store.record(UsageReading(windows: [weekly], plan: "Max 20×", fetchedAt: now)!, for: .claude)
+        var measuredWeeklyHeight: CGFloat = 0
+        try await capture(panel(onHeight: { measuredWeeklyHeight = $0 }), name: "panel-weekly-limits", output: output)
+        let weeklyOnlyHeight = measuredWeeklyHeight
+        precondition((500...640).contains(weeklyOnlyHeight),
+                     "The weekly-only panel should fit its content, got \(weeklyOnlyHeight) pt")
+        store.record(claude, for: .claude)
         try await capture(panel(), name: "panel-both", output: output)
         try await capture(panel(flatScreen), name: "panel-pill-both", output: output)
         let sonnet = quota("sonnet", "Weekly · Sonnet", 8, 10_080, elapsed: 0.45)
         store.record(UsageReading(windows: [session, weekly, opus, sonnet], plan: "Max 20×")!, for: .claude)
-        try await capture(panel(), name: "panel-all-claude-limits", output: output)
+        var allLimitsHeight: CGFloat = 0
+        try await capture(panel(onHeight: { allLimitsHeight = $0 }), name: "panel-all-claude-limits", output: output)
+        precondition(allLimitsHeight > weeklyOnlyHeight && allLimitsHeight <= NotchShape.expandedHeight)
+        var cappedHeight: CGFloat = 0
+        try await capture(panel(height: 480, onHeight: { cappedHeight = $0 }), name: "panel-short-display", output: output)
+        precondition(cappedHeight == 480, "The scroll viewport should fit the available screen height")
+        print("Panel heights: weekly only \(weeklyOnlyHeight) pt, all limits \(allLimitsHeight) pt, short display \(cappedHeight) pt")
+        try await capture(ScrollView {
+            UsageDashboard(store: store, now: now).padding(20)
+        }.frame(width: 736, height: 712).background(.black), name: "usage-dashboard", output: output)
         try await capture(SettingsView.verification(store: store, tab: .general), name: "settings-general", output: output)
         try await capture(SettingsView.verification(store: store, tab: .general, automaticallyChecks: false),
                           name: "settings-automatic-updates-off", output: output)
@@ -102,9 +124,9 @@ enum VerifyDesign {
         )!
         precondition(CompactQuotaReset.weekly(monday).text == "Mon 06:00")
         precondition(CompactQuotaReset.weekly(monday).spoken == "resets Monday 06:00")
-        let codexReset = codexWeek.compactReset(at: now)!.spoken
         precondition(strip(cameraScreen).accessibilitySummary
-            == "AI usage: Codex 17% of weekly limit, \(codexReset), on pace for about 38% by reset. Show details")
+            == "AI usage: Codex 17% of weekly limit, \(codexWeek.compactReset(at: now)!.spoken), Even pace: 75% used. Show details")
+        precondition(!strip(cameraScreen, at: now.addingTimeInterval(300)).accessibilitySummary.contains("Even pace:"))
         for period in HistoryPeriod.allCases {
             let history = UsageHistory(snapshot: snapshot, period: period, providers: preferences.enabledProviders)
             precondition(Array(history.values.keys) == [.codex])
@@ -119,10 +141,11 @@ enum VerifyDesign {
         try await capture(SettingsView.verification(store: store, tab: .providers), name: "settings-providers-codex", output: output)
         preferences.setEnabled(true, for: .claude)
         preferences.setEnabled(false, for: .codex)
-        precondition(session.compactReset(at: now)?.text == "1h 24m")
-        precondition(session.compactReset(at: now.addingTimeInterval(3_600))?.text == "24m")
+        store.record(UsageReading(windows: [session], plan: "Max 20×", fetchedAt: now)!, for: .claude)
+        precondition(session.compactReset(at: now)?.text == "1h 42m")
+        precondition(session.compactReset(at: now.addingTimeInterval(3_600))?.text == "42m")
         precondition(strip(cameraScreen).accessibilitySummary
-            == "AI usage: Claude 62% of 5-hour session, resets in 1 hour 24 minutes, on pace for about 86% by reset. Show details")
+            == "AI usage: Claude 99% of 5-hour session, resets in 1 hour 42 minutes, Even pace: 66% used. Show details")
         try await capture(collapsed(cameraScreen), name: "notch-claude", output: output)
         try await capture(collapsed(flatScreen), name: "pill-claude", output: output)
         try await capture(panel(), name: "panel-claude", output: output)
@@ -141,7 +164,7 @@ enum VerifyDesign {
         store.record(UsageReading(windows: [onPaceToHit], plan: "Pro Lite")!, for: .codex)
         try await capture(panel(), name: "panel-forecast-states", output: output)
         try await capture(collapsed(cameraScreen), name: "notch-forecast-states", output: output)
-        print("PASS: layout and quota window selection, reset text and narration, minimum fills, provider persistence, last-provider guard, history filtering and totals, update check dates")
+        print("PASS: pacing, adaptive panel height, layout and quota window selection, reset text and narration, minimum fills, provider persistence, last-provider guard, history filtering and totals, update check dates")
     }
 
     static func verifyUpdateCheckDates() {
@@ -159,6 +182,31 @@ enum VerifyDesign {
         precondition(UsageFormat.lastUpdateCheck(earlier, now: now, calendar: calendar, locale: locale)
                      == "Last checked 14 Nov")
         precondition(UsageFormat.lastUpdateCheck(nil, now: now, calendar: calendar, locale: locale) == "Not checked yet")
+    }
+
+    static func verifyPacing() {
+        let start = Date(timeIntervalSince1970: 0)
+        let reset = start.addingTimeInterval(604_800)
+        let sample = start.addingTimeInterval(151_200)
+        let now = sample.addingTimeInterval(60)
+        func weekly(_ used: Double, reset: Date? = reset, minutes: Int? = 10_080) -> QuotaWindow {
+            QuotaWindow("week", title: "Weekly", used: used, resetsAt: reset, durationMinutes: minutes)!
+        }
+        precondition(weekly(50).elapsedFraction(at: sample) == 0.25)
+        precondition(weekly(50).pace(sampledAt: sample, now: now) == .limitAt(start.addingTimeInterval(302_400)))
+        precondition(weekly(12.5).pace(sampledAt: sample, now: now) == .remaining(0.5))
+        precondition(weekly(25).pace(sampledAt: sample, now: now) == .remaining(0))
+        precondition(weekly(100).pace(sampledAt: sample, now: now) == .reached)
+        precondition(weekly(0).pace(sampledAt: sample, now: now) == .remaining(1))
+        precondition(weekly(50).elapsedFraction(at: start) == 0)
+        precondition(weekly(50).pace(sampledAt: start, now: now) == nil)
+        precondition(weekly(50).elapsedFraction(at: start.addingTimeInterval(-1)) == nil)
+        precondition(weekly(100).pace(sampledAt: sample, now: reset) == nil)
+        precondition(weekly(50, reset: nil).elapsedFraction(at: sample) == nil)
+        precondition(weekly(50, minutes: 0).elapsedFraction(at: sample) == nil)
+        let session = weekly(40, reset: start.addingTimeInterval(18_000), minutes: 300)
+        let oneHour = start.addingTimeInterval(3_600)
+        precondition(session.pace(sampledAt: oneHour, now: oneHour) == .limitAt(start.addingTimeInterval(9_000)))
     }
 
     @MainActor static func capture<Content: View>(_ content: Content, name: String, output: URL) async throws {

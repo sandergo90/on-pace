@@ -1,0 +1,7 @@
+"pace.marker" = "Even pace: %@ used";
+"pace.remaining" = "~%@ left at reset";
+"pace.limitAt" = "Limit around %@";
+"pace.reached" = "Limit reached";
+"pace.explanation" = "White line: time elapsed in this quota window. Forecast assumes the same average usage since the window started.";
+"dashboard.open" = "Open Usage Dashboard";
+"dashboard.title" = "Usage Dashboard";

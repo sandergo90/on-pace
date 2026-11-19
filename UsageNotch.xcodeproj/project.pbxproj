@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		11E06874C72E4EA5A8BA4053 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 726CF2D49232420A86DEF5D6 /* Localizable.strings */; };
 		07D43AD400BEA777A66788DD /* UsageLogWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCD2DDCF49A7D94BC0D98ADB /* UsageLogWatcher.swift */; };
 		0B4B74C62615013EFDF0B8F4 /* UsageFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52BFBC27F50314FFA5DECDDB /* UsageFormat.swift */; };
 		2233D2D468D0FA38707D2016 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 8FF1B0636C5391B7A20D10B8 /* Sparkle */; };
@@ -32,6 +33,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		0D6EC5418CF44712B57D348E /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		00AE458C2E3690DC601A4125 /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
 		071AA4FE22C9E337D826A790 /* UsagePreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsagePreferences.swift; sourceTree = "<group>"; };
 		1EDD2C0B2C10DFD3E165E993 /* UsageCharts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageCharts.swift; sourceTree = "<group>"; };
@@ -109,6 +111,7 @@
 		88EF11E5B996E908D72FE6DF /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				726CF2D49232420A86DEF5D6 /* Localizable.strings */,
 				FC782438BF4AB5D30CB7CE07 /* Sparkle-License.txt */,
 			);
 			path = Resources;
@@ -187,11 +190,23 @@
 			buildActionMask = 2147483647;
 			files = (
 				D01AB1E773223F4259279604 /* Assets.xcassets in Resources */,
+				11E06874C72E4EA5A8BA4053 /* Localizable.strings in Resources */,
 				A7C239FE9AC4A355C26A2469 /* Sparkle-License.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXVariantGroup section */
+		726CF2D49232420A86DEF5D6 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				0D6EC5418CF44712B57D348E /* en */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 
 /* Begin PBXSourcesBuildPhase section */
 		D22D5A6C6147973355167565 /* Sources */ = {

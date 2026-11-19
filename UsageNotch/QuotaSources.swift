@@ -42,8 +42,8 @@ enum QuotaSources {
         let windows = [
             limits.fiveHour?.window(id: "session", title: "5-hour session", durationMinutes: 300),
             limits.sevenDay?.window(id: "week", title: "Weekly · all models", durationMinutes: 10_080),
-            limits.sevenDayOpus?.window(id: "opus", title: "Weekly · Opus"),
-            limits.sevenDaySonnet?.window(id: "sonnet", title: "Weekly · Sonnet")
+            limits.sevenDayOpus?.window(id: "opus", title: "Weekly · Opus", durationMinutes: 10_080),
+            limits.sevenDaySonnet?.window(id: "sonnet", title: "Weekly · Sonnet", durationMinutes: 10_080)
         ].compactMap { $0 }
         let plan = switch payload.rateLimitTier {
         case "default_claude_max_20x": "Max 20×"

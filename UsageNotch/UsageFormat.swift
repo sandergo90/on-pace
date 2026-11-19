@@ -36,6 +36,14 @@ enum UsageFormat {
         date.formatted(.dateTime.weekday(.abbreviated).locale(locale))
     }
 
+    static func pacePercent(_ fraction: Double) -> String {
+        fraction.formatted(.percent.precision(.fractionLength(0...1)).locale(locale))
+    }
+
+    static func paceMarker(_ fraction: Double) -> String {
+        String.localizedStringWithFormat(String(localized: "pace.marker"), pacePercent(fraction))
+    }
+
     static func duration(_ minutes: Int) -> String {
         let hours = minutes / 60
         if hours >= 24 { return "\(hours / 24)d \(hours % 24)h" }

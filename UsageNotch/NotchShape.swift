@@ -125,7 +125,7 @@ struct EdgeLight: View {
     }
 
     private static let logoSize: CGFloat = 14
-    private static let barWidth: CGFloat = 30
+    private static let barWidth: CGFloat = 42
 
     var body: some View {
         if let action {
@@ -162,7 +162,7 @@ struct EdgeLight: View {
                 if let onlyProvider {
                     if let reset = reset(for: onlyProvider) { resetReading(reset, provider: onlyProvider) }
                 } else {
-                    reading(.codex, mirrored: true)
+                    reading(.codex, logoOnRight: true)
                 }
             }
             .padding(.trailing, CompactStyle.notchReadingInset)
@@ -184,7 +184,7 @@ struct EdgeLight: View {
                 let codexConnected = !store.state(for: .codex).isDisconnected
                 if claudeConnected { reading(.claude) }
                 if claudeConnected && codexConnected { divider }
-                if codexConnected { reading(.codex, mirrored: true) }
+                if codexConnected { reading(.codex, logoOnRight: true) }
             }
         }
         .padding(.horizontal, style.shoulderWidth + 12)
@@ -195,17 +195,17 @@ struct EdgeLight: View {
         Rectangle().fill(.white.opacity(0.16)).frame(width: 1, height: 12)
     }
 
-    private func reading(_ provider: Provider, mirrored: Bool = false) -> some View {
+    private func reading(_ provider: Provider, logoOnRight: Bool = false) -> some View {
         let state = store.state(for: provider)
         return HStack(spacing: 7) {
             if !state.isDisconnected {
-                if !mirrored { ToolSymbol(provider: provider, size: Self.logoSize) }
+                if !logoOnRight { ToolSymbol(provider: provider, size: Self.logoSize) }
                 if let quota = state.reading?.compactQuota {
-                    if mirrored { percentage(quota) }
-                    bar(quota, provider: provider, mirrored: mirrored)
-                    if !mirrored { percentage(quota) }
+                    if logoOnRight { percentage(quota) }
+                    bar(quota, provider: provider)
+                    if !logoOnRight { percentage(quota) }
                 }
-                if mirrored { ToolSymbol(provider: provider, size: Self.logoSize) }
+                if logoOnRight { ToolSymbol(provider: provider, size: Self.logoSize) }
             }
         }
         .opacity(stale(provider) ? 0.4 : 1)
@@ -249,37 +249,18 @@ struct EdgeLight: View {
         .accessibilityHidden(true)
     }
 
-    private func bar(_ quota: QuotaWindow, provider: Provider, mirrored: Bool) -> some View {
+    private func bar(_ quota: QuotaWindow, provider: Provider) -> some View {
         let isStale = stale(provider)
-        let reached = quota.level == .reached && (quota.resetsAt.map { $0 > now } ?? true)
-        let fillWidth = quota.fillWidth(in: Self.barWidth, minimum: 3)
-        return ZStack(alignment: mirrored ? .trailing : .leading) {
-            Capsule().fill(.white.opacity(0.16))
-            if quota.fractionUsed > 0 {
-                Throb(enabled: reached && !isStale && animateHighlights) {
-                    Capsule()
-                        .fill(provider.tint)
-                        .frame(width: fillWidth, height: 4)
-                        .shadow(
-                            color: provider.tint.opacity(quota.level == .normal || isStale ? 0 : 0.8),
-                            radius: reached ? 8 : 5
-                        )
+        let pace = isStale ? nil : quota.elapsedFraction(at: now)
+        let highlights = !isStale && (quota.resetsAt.map { $0 > now } ?? true)
+        return QuotaBar(quota: quota, tint: provider.tint, pace: pace, minimumFill: 3,
+                        highlights: highlights, animates: animateHighlights)
+            .frame(width: Self.barWidth, height: 4)
+            .overlay {
+                if animateHighlights && !reduceMotion {
+                    ResetRipple(provider: provider, reset: store.compactQuotaResets[provider])
                 }
             }
-        }
-        .frame(width: Self.barWidth, height: 4)
-        .overlay {
-            if !isStale, let projected = quota.pace(at: now)?.projectedFraction {
-                QuotaForecastBar(projected: projected, fillWidth: fillWidth, tint: provider.tint.opacity(0.4),
-                                 tickSize: CGSize(width: 1.5, height: 8), mirrored: mirrored)
-            }
-        }
-        .overlay {
-            if animateHighlights && !reduceMotion {
-                ResetRipple(provider: provider, mirrored: mirrored, reset: store.compactQuotaResets[provider])
-            }
-        }
-        .accessibilityHidden(true)
     }
 
     private func stale(_ provider: Provider) -> Bool {
@@ -296,47 +277,55 @@ struct EdgeLight: View {
             let age = isStale ? ", last known reading" : ""
             let period = quota.durationMinutes == 300 ? "5-hour session" : "weekly limit"
             let reset = onlyProvider == provider ? self.reset(for: provider).map { ", \($0.spoken)" } ?? "" : ""
-            let forecast = isStale ? "" : quota.pace(at: now)?.accessibilitySuffix ?? ""
-            return "\(provider.name) \(quota.percentage) of \(period)\(age)\(reset)\(forecast)"
+            let pace = isStale ? nil : quota.elapsedFraction(at: now)
+            let marker = pace.map { ", " + UsageFormat.paceMarker($0) } ?? ""
+            return "\(provider.name) \(quota.percentage) of \(period)\(age)\(reset)\(marker)"
         }
         let readings = descriptions.isEmpty ? "no readings" : descriptions.joined(separator: ", ")
         return "AI usage: \(readings)." + (action == nil ? "" : " Show details")
     }
 }
 
-struct QuotaForecastBar: View {
-    let projected: Double
-    let fillWidth: CGFloat
+struct QuotaBar: View {
+    let quota: QuotaWindow
     let tint: Color
-    let tickSize: CGSize
-    var mirrored = false
+    let pace: Double?
+    var minimumFill: CGFloat = 4
+    var highlights = false
+    var animates = false
 
     var body: some View {
         GeometryReader { geometry in
             let width = geometry.size.width
-            let height = geometry.size.height
-            let stop = width * projected
-            let stretch = max(0, stop - fillWidth)
-            let edge = mirrored ? width - stop : stop
-
-            Rectangle()
-                .fill(tint)
-                .frame(width: stretch, height: height)
-                .position(x: edge + (mirrored ? stretch / 2 : -stretch / 2), y: height / 2)
-                .clipShape(Capsule())
-            if projected < 1 && stop > fillWidth {
-                Rectangle()
-                    .fill(.white.opacity(0.92))
-                    .frame(width: tickSize.width, height: tickSize.height)
-                    .position(x: edge, y: height / 2)
+            let reached = quota.level == .reached
+            ZStack(alignment: .leading) {
+                Capsule().fill(.white.opacity(0.12))
+                if quota.fractionUsed > 0 {
+                    Throb(enabled: highlights && animates && reached) {
+                        Capsule().fill(tint)
+                            .frame(width: quota.fillWidth(in: width, minimum: pace == nil ? minimumFill : 0))
+                            .shadow(color: tint.opacity(highlights && quota.level != .normal ? 0.65 : 0),
+                                    radius: reached ? 8 : 5)
+                    }
+                }
+            }
+            .overlay {
+                if let pace {
+                    Capsule().fill(.white)
+                        .overlay { Capsule().strokeBorder(.black.opacity(0.6), lineWidth: 0.5) }
+                        .frame(width: 2, height: geometry.size.height + 4)
+                        .position(x: min(width - 1, max(1, width * pace)), y: geometry.size.height / 2)
+                }
             }
         }
+        .environment(\.layoutDirection, .leftToRight)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
 private struct ResetRipple: View {
     let provider: Provider
-    let mirrored: Bool
     let reset: Date?
 
     var body: some View {
@@ -348,7 +337,7 @@ private struct ResetRipple: View {
                 LinearGradient(colors: [.clear, provider.tint, .clear],
                                startPoint: .leading, endPoint: .trailing)
                     .frame(width: crest)
-                    .offset(x: (width - crest) / 2 + (mirrored ? -distance : distance))
+                    .offset(x: (width - crest) / 2 + distance)
                     .opacity(0.85 * sin(.pi * progress))
             } keyframes: { _ in
                 KeyframeTrack(\.self) {

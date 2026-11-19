@@ -3,6 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p .build/design-verification/source .build/design-verification/output
+cp -R UsageNotch/Resources/en.lproj .build/design-verification/
 verification_sources=()
 for source in UsageNotch/*.swift; do
     if [[ "$source" != UsageNotch/App.swift ]]; then
